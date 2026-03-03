@@ -1,0 +1,29 @@
+name: ScreenshotToTicketApp
+options:
+  deploymentTarget:
+    iOS: 16.0
+settings:
+  base:
+    PRODUCT_BUNDLE_IDENTIFIER: com.iagentur.screenshottoticket
+    SWIFT_VERSION: 5.0
+    CODE_SIGN_STYLE: Automatic
+    DEVELOPMENT_TEAM: HSYHBF5UDF
+targets:
+  ScreenshotToTicketApp:
+    type: application
+    platform: iOS
+    sources:
+      - ScreenshotToTicketApp
+    info:
+      path: ScreenshotToTicketApp/Info.plist
+      properties:
+        CFBundleDisplayName: ScreenshotToTicket
+        UILaunchScreen: {}
+        NSPhotoLibraryUsageDescription: Needed to pick screenshots to attach to Jira issues.
+    settings:
+      base:
+        INFOPLIST_FILE: ScreenshotToTicketApp/Info.plist
+        PRODUCT_NAME: ScreenshotToTicketApp
+        TARGETED_DEVICE_FAMILY: 1
+    scheme:
+      testTargets: []

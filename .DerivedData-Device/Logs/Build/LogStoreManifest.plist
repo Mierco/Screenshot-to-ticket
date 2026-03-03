@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>logFormatVersion</key>
+	<integer>12</integer>
+	<key>logs</key>
+	<dict>
+		<key>45656D9C-3639-4A5C-B624-EA07C12A37C7</key>
+		<dict>
+			<key>className</key>
+			<string>IDECommandLineBuildLog</string>
+			<key>documentTypeString</key>
+			<string>&lt;nil&gt;</string>
+			<key>domainType</key>
+			<string>Xcode.IDEActivityLogDomainType.BuildLog</string>
+			<key>fileName</key>
+			<string>45656D9C-3639-4A5C-B624-EA07C12A37C7.xcactivitylog</string>
+			<key>hasPrimaryLog</key>
+			<true/>
+			<key>primaryObservable</key>
+			<dict>
+				<key>highLevelStatus</key>
+				<string>E</string>
+				<key>totalNumberOfAnalyzerIssues</key>
+				<integer>0</integer>
+				<key>totalNumberOfErrors</key>
+				<integer>2</integer>
+				<key>totalNumberOfTestFailures</key>
+				<integer>0</integer>
+				<key>totalNumberOfWarnings</key>
+				<integer>0</integer>
+			</dict>
+			<key>schemeIdentifier-containerName</key>
+			<string>ScreenshotToTicketApp project</string>
+			<key>schemeIdentifier-schemeName</key>
+			<string>ScreenshotToTicketApp</string>
+			<key>schemeIdentifier-sharedScheme</key>
+			<integer>1</integer>
+			<key>signature</key>
+			<string>Building project ScreenshotToTicketApp with scheme ScreenshotToTicketApp</string>
+			<key>timeStartedRecording</key>
+			<real>793913032.56119704</real>
+			<key>timeStoppedRecording</key>
+			<real>793913034.67507303</real>
+			<key>title</key>
+			<string>Building project ScreenshotToTicketApp with scheme ScreenshotToTicketApp</string>
+			<key>uniqueIdentifier</key>
+			<string>45656D9C-3639-4A5C-B624-EA07C12A37C7</string>
+		</dict>
+	</dict>
+</dict>
+</plist>

@@ -1,0 +1,129 @@
+{
+  "" : {
+    "diagnostics" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/ScreenshotToTicketApp-primary.dia",
+    "emit-module-dependencies" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/ScreenshotToTicketApp-primary-emit-module.d",
+    "emit-module-diagnostics" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/ScreenshotToTicketApp-primary-emit-module.dia",
+    "pch" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/ScreenshotToTicketApp-primary-Bridging-header.pch",
+    "swift-dependencies" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/ScreenshotToTicketApp-primary.swiftdeps"
+  },
+  "/Users/admin/Code/Screenshot-to-ticket/ScreenshotToTicketApp/App/ScreenshotToTicketApp.swift" : {
+    "const-values" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/ScreenshotToTicketApp.swiftconstvalues",
+    "dependencies" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/ScreenshotToTicketApp.d",
+    "diagnostics" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/ScreenshotToTicketApp.dia",
+    "index-unit-output-path" : "/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/ScreenshotToTicketApp.o",
+    "llvm-bc" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/ScreenshotToTicketApp.bc",
+    "object" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/ScreenshotToTicketApp.o",
+    "swift-dependencies" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/ScreenshotToTicketApp.swiftdeps",
+    "swiftmodule" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/ScreenshotToTicketApp~partial.swiftmodule"
+  },
+  "/Users/admin/Code/Screenshot-to-ticket/ScreenshotToTicketApp/Models/JiraModels.swift" : {
+    "const-values" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/JiraModels.swiftconstvalues",
+    "dependencies" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/JiraModels.d",
+    "diagnostics" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/JiraModels.dia",
+    "index-unit-output-path" : "/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/JiraModels.o",
+    "llvm-bc" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/JiraModels.bc",
+    "object" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/JiraModels.o",
+    "swift-dependencies" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/JiraModels.swiftdeps",
+    "swiftmodule" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/JiraModels~partial.swiftmodule"
+  },
+  "/Users/admin/Code/Screenshot-to-ticket/ScreenshotToTicketApp/Services/JiraClient.swift" : {
+    "const-values" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/JiraClient.swiftconstvalues",
+    "dependencies" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/JiraClient.d",
+    "diagnostics" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/JiraClient.dia",
+    "index-unit-output-path" : "/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/JiraClient.o",
+    "llvm-bc" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/JiraClient.bc",
+    "object" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/JiraClient.o",
+    "swift-dependencies" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/JiraClient.swiftdeps",
+    "swiftmodule" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/JiraClient~partial.swiftmodule"
+  },
+  "/Users/admin/Code/Screenshot-to-ticket/ScreenshotToTicketApp/Services/KeychainService.swift" : {
+    "const-values" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/KeychainService.swiftconstvalues",
+    "dependencies" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/KeychainService.d",
+    "diagnostics" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/KeychainService.dia",
+    "index-unit-output-path" : "/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/KeychainService.o",
+    "llvm-bc" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/KeychainService.bc",
+    "object" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/KeychainService.o",
+    "swift-dependencies" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/KeychainService.swiftdeps",
+    "swiftmodule" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/KeychainService~partial.swiftmodule"
+  },
+  "/Users/admin/Code/Screenshot-to-ticket/ScreenshotToTicketApp/Services/OpenAIClient.swift" : {
+    "const-values" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/OpenAIClient.swiftconstvalues",
+    "dependencies" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/OpenAIClient.d",
+    "diagnostics" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/OpenAIClient.dia",
+    "index-unit-output-path" : "/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/OpenAIClient.o",
+    "llvm-bc" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/OpenAIClient.bc",
+    "object" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/OpenAIClient.o",
+    "swift-dependencies" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/OpenAIClient.swiftdeps",
+    "swiftmodule" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/OpenAIClient~partial.swiftmodule"
+  },
+  "/Users/admin/Code/Screenshot-to-ticket/ScreenshotToTicketApp/Services/SettingsStore.swift" : {
+    "const-values" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/SettingsStore.swiftconstvalues",
+    "dependencies" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/SettingsStore.d",
+    "diagnostics" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/SettingsStore.dia",
+    "index-unit-output-path" : "/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/SettingsStore.o",
+    "llvm-bc" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/SettingsStore.bc",
+    "object" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/SettingsStore.o",
+    "swift-dependencies" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/SettingsStore.swiftdeps",
+    "swiftmodule" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/SettingsStore~partial.swiftmodule"
+  },
+  "/Users/admin/Code/Screenshot-to-ticket/ScreenshotToTicketApp/Utils/ImageCompression.swift" : {
+    "const-values" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/ImageCompression.swiftconstvalues",
+    "dependencies" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/ImageCompression.d",
+    "diagnostics" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/ImageCompression.dia",
+    "index-unit-output-path" : "/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/ImageCompression.o",
+    "llvm-bc" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/ImageCompression.bc",
+    "object" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/ImageCompression.o",
+    "swift-dependencies" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/ImageCompression.swiftdeps",
+    "swiftmodule" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/ImageCompression~partial.swiftmodule"
+  },
+  "/Users/admin/Code/Screenshot-to-ticket/ScreenshotToTicketApp/Utils/SemanticVersion.swift" : {
+    "const-values" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/SemanticVersion.swiftconstvalues",
+    "dependencies" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/SemanticVersion.d",
+    "diagnostics" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/SemanticVersion.dia",
+    "index-unit-output-path" : "/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/SemanticVersion.o",
+    "llvm-bc" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/SemanticVersion.bc",
+    "object" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/SemanticVersion.o",
+    "swift-dependencies" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/SemanticVersion.swiftdeps",
+    "swiftmodule" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/SemanticVersion~partial.swiftmodule"
+  },
+  "/Users/admin/Code/Screenshot-to-ticket/ScreenshotToTicketApp/Utils/VideoThumbnail.swift" : {
+    "const-values" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/VideoThumbnail.swiftconstvalues",
+    "dependencies" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/VideoThumbnail.d",
+    "diagnostics" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/VideoThumbnail.dia",
+    "index-unit-output-path" : "/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/VideoThumbnail.o",
+    "llvm-bc" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/VideoThumbnail.bc",
+    "object" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/VideoThumbnail.o",
+    "swift-dependencies" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/VideoThumbnail.swiftdeps",
+    "swiftmodule" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/VideoThumbnail~partial.swiftmodule"
+  },
+  "/Users/admin/Code/Screenshot-to-ticket/ScreenshotToTicketApp/ViewModels/MainViewModel.swift" : {
+    "const-values" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/MainViewModel.swiftconstvalues",
+    "dependencies" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/MainViewModel.d",
+    "diagnostics" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/MainViewModel.dia",
+    "index-unit-output-path" : "/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/MainViewModel.o",
+    "llvm-bc" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/MainViewModel.bc",
+    "object" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/MainViewModel.o",
+    "swift-dependencies" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/MainViewModel.swiftdeps",
+    "swiftmodule" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/MainViewModel~partial.swiftmodule"
+  },
+  "/Users/admin/Code/Screenshot-to-ticket/ScreenshotToTicketApp/Views/MainView.swift" : {
+    "const-values" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/MainView.swiftconstvalues",
+    "dependencies" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/MainView.d",
+    "diagnostics" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/MainView.dia",
+    "index-unit-output-path" : "/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/MainView.o",
+    "llvm-bc" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/MainView.bc",
+    "object" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/MainView.o",
+    "swift-dependencies" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/MainView.swiftdeps",
+    "swiftmodule" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/MainView~partial.swiftmodule"
+  },
+  "/Users/admin/Code/Screenshot-to-ticket/ScreenshotToTicketApp/Views/SettingsView.swift" : {
+    "const-values" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/SettingsView.swiftconstvalues",
+    "dependencies" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/SettingsView.d",
+    "diagnostics" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/SettingsView.dia",
+    "index-unit-output-path" : "/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/SettingsView.o",
+    "llvm-bc" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/SettingsView.bc",
+    "object" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/SettingsView.o",
+    "swift-dependencies" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/SettingsView.swiftdeps",
+    "swiftmodule" : "/Users/admin/Code/Screenshot-to-ticket/.DerivedData/Build/Intermediates.noindex/ScreenshotToTicketApp.build/Debug-iphonesimulator/ScreenshotToTicketApp.build/Objects-normal/arm64/SettingsView~partial.swiftmodule"
+  }
+}
