@@ -61,7 +61,7 @@ struct MainView: View {
                     }
                 }
             }
-            .navigationTitle("Screenshot to Jira")
+            .navigationTitle("Screenshoter")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Settings") { showingSettings = true }
