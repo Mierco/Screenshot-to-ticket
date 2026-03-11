@@ -18,7 +18,7 @@ final class SettingsStore: ObservableObject {
 
         workspaceURL = defaults.string(forKey: "workspaceURL") ?? "https://iagentur.jira.com"
         projectKey = defaults.string(forKey: "projectKey") ?? "TMNEWS"
-        model = defaults.string(forKey: "openaiModel") ?? "gpt-5.3-codex"
+        model = defaults.string(forKey: "openaiModel") ?? "gpt-5.4-codex"
     }
 
     func save() throws {

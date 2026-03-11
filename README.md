@@ -38,7 +38,7 @@ Open the app, tap `Settings`, then fill:
 - Atlassian Email
 - Jira API Token
 - OpenAI API Key
-- OpenAI Model ID (fully configurable; default: `gpt-5.3-codex`)
+- OpenAI Model ID (fully configurable; default: `gpt-5.4-codex`)
 
 Credentials are stored in Keychain. Workspace URL/project/model are in UserDefaults.
 
