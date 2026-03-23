@@ -5,7 +5,6 @@ import UIKit
 struct MainView: View {
     @EnvironmentObject private var settings: SettingsStore
     @StateObject private var vm = MainViewModel()
-    @State private var showingSettings = false
 
     var body: some View {
         NavigationStack {
@@ -148,15 +147,6 @@ struct MainView: View {
                 }
             }
             .navigationTitle("Screenshot to Jira")
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Settings") { showingSettings = true }
-                }
-            }
-            .sheet(isPresented: $showingSettings) {
-                SettingsView()
-                    .environmentObject(settings)
-            }
         }
         .onChange(of: vm.selectedItems) { _ in
             Task { await vm.refreshSelectedMedia() }
