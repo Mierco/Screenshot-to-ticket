@@ -6,8 +6,18 @@ struct ScreenshotToTicketApp: App {
 
     var body: some Scene {
         WindowGroup {
-            MainView()
-                .environmentObject(settings)
+            TabView {
+                MainView()
+                    .tabItem {
+                        Label("Add ticket", systemImage: "plus.square")
+                    }
+
+                SettingsView()
+                    .tabItem {
+                        Label("Settings", systemImage: "gearshape")
+                    }
+            }
+            .environmentObject(settings)
         }
     }
 }
