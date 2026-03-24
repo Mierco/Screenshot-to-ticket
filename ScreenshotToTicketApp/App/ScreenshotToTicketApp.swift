@@ -9,7 +9,7 @@ struct ScreenshotToTicketApp: App {
             TabView {
                 MainView()
                     .tabItem {
-                        Label("Add ticket", systemImage: "plus.square")
+                        Label("Add ticket", systemImage: "house")
                     }
 
                 SettingsView()
