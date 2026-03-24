@@ -2,7 +2,6 @@ import SwiftUI
 import UIKit
 
 struct SettingsView: View {
-    @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var settings: SettingsStore
     @State private var saveMessage = ""
     @State private var isLoadingProjects = false
@@ -120,11 +119,6 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("Settings")
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Close") { dismiss() }
-                }
-            }
         }
     }
 

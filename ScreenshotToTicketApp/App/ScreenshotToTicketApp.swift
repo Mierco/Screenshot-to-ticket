@@ -8,11 +8,13 @@ struct ScreenshotToTicketApp: App {
         WindowGroup {
             TabView {
                 MainView()
+                    .accessibilityIdentifier("tab.addTicket.content")
                     .tabItem {
                         Label("Add ticket", systemImage: "house")
                     }
 
                 SettingsView()
+                    .accessibilityIdentifier("tab.settings.content")
                     .tabItem {
                         Label("Settings", systemImage: "gearshape")
                     }
