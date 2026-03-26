@@ -13,15 +13,6 @@ final class MainViewModel: ObservableObject {
         let aiPreviewJPEG: Data?
     }
 
-    enum AnnotationShape: String, CaseIterable, Identifiable {
-        case freehand = "Freehand"
-        case circle = "Circle"
-        case rectangle = "Rectangle"
-        case arrow = "Arrow"
-
-        var id: String { rawValue }
-    }
-
     enum AnnotationColor: String, CaseIterable, Identifiable {
         case red = "Red"
         case yellow = "Yellow"
@@ -55,7 +46,6 @@ final class MainViewModel: ObservableObject {
     struct AnnotationMark: Identifiable {
         let id = UUID()
         var points: [CGPoint] // normalized to [0,1]
-        let shape: AnnotationShape
         let color: AnnotationColor
     }
 
@@ -84,8 +74,9 @@ final class MainViewModel: ObservableObject {
     @Published var isSubmitting = false
     @Published var isLoadingMedia = false
     @Published var enableMarkup = false
-    @Published var selectedShape: AnnotationShape = .circle
     @Published var selectedColor: AnnotationColor = .red
+    @Published var markupOpacity = 0.75
+    @Published var markupCanvasScale = 1.0
 
     @Published private(set) var marksByMediaID: [UUID: [AnnotationMark]] = [:]
 
@@ -106,31 +97,18 @@ final class MainViewModel: ObservableObject {
         }
     }
 
-    func addMark(mediaID: UUID, normalizedPoint: CGPoint) {
-        guard let _ = marksByMediaID[mediaID] else { return }
-        let clamped = clampedPoint(normalizedPoint)
-        marksByMediaID[mediaID, default: []].append(
-            AnnotationMark(points: [clamped], shape: selectedShape, color: selectedColor)
-        )
-    }
-
     func addFreehandPoint(mediaID: UUID, normalizedPoint: CGPoint, beginStroke: Bool) {
         guard marksByMediaID[mediaID] != nil else { return }
         let clamped = clampedPoint(normalizedPoint)
 
         if beginStroke || marksByMediaID[mediaID]?.isEmpty == true {
             marksByMediaID[mediaID, default: []].append(
-                AnnotationMark(points: [clamped], shape: .freehand, color: selectedColor)
+                AnnotationMark(points: [clamped], color: selectedColor)
             )
             return
         }
 
         guard var marks = marksByMediaID[mediaID], var last = marks.last else { return }
-        guard last.shape == .freehand else {
-            marks.append(AnnotationMark(points: [clamped], shape: .freehand, color: selectedColor))
-            marksByMediaID[mediaID] = marks
-            return
-        }
         if let previous = last.points.last {
             let dx = clamped.x - previous.x
             let dy = clamped.y - previous.y
@@ -177,11 +155,16 @@ final class MainViewModel: ObservableObject {
             }
 
             status = "Drafting ticket text with AI..."
-            let openAI = OpenAIClient(apiKey: settings.openAIKey, model: settings.model)
+            let openAI = OpenAIClient(
+                apiKey: settings.openAIKey,
+                model: settings.model,
+                reasoningEffort: settings.reasoningEffort,
+                ticketPrompt: settings.effectiveTicketPrompt
+            )
             let draft = try await openAI.draftTicket(from: aiImages, userHint: hintText)
 
             let notes = hintText.isEmpty ? "" : "\n\nReporter notes:\n\(hintText)"
-            let description = draft.description + notes
+            let descriptionText = draft.description + notes
 
             let jira = JiraClient(
                 workspaceURL: settings.workspaceURL,
@@ -196,17 +179,33 @@ final class MainViewModel: ObservableObject {
             status = "Creating Jira issue..."
             let issue = try await jira.createIssue(
                 summary: draft.summary,
-                description: description,
+                description: jira.adfDescription(from: descriptionText),
                 fixVersionId: fixVersion?.id
             )
 
-            status = "Uploading attachments..."
+            status = "Uploading media..."
+            var uploadedAttachments: [JiraAttachmentMetadata] = []
             for attachment in attachments {
-                try await jira.attachFile(
+                let uploaded = try await jira.attachFile(
                     issueKey: issue.key,
                     data: attachment.data,
                     fileName: attachment.fileName,
                     contentType: attachment.contentType
+                )
+                uploadedAttachments.append(uploaded)
+            }
+
+            status = "Embedding media in description..."
+            do {
+                try await jira.updateIssueDescription(
+                    issueKey: issue.key,
+                    description: jira.adfDescription(from: descriptionText, attachments: uploadedAttachments)
+                )
+            } catch {
+                // Fallback: keep media references in the description as links if rich media ADF is rejected.
+                try await jira.updateIssueDescription(
+                    issueKey: issue.key,
+                    description: jira.adfDescriptionWithAttachmentLinks(from: descriptionText, attachments: uploadedAttachments)
                 )
             }
 
@@ -310,43 +309,16 @@ final class MainViewModel: ObservableObject {
 
             for mark in marks {
                 let points = mark.points.map { CGPoint(x: $0.x * size.width, y: $0.y * size.height) }
-                guard let point = points.first else { continue }
-                let shapeSize = max(36, min(size.width, size.height) * 0.16)
-                let stroke = mark.color.uiColor
+                let stroke = mark.color.uiColor.withAlphaComponent(CGFloat(markupOpacity))
                 cg.setStrokeColor(stroke.cgColor)
-                cg.setFillColor(stroke.withAlphaComponent(0.18).cgColor)
 
-                switch mark.shape {
-                case .freehand:
-                    guard points.count > 1 else { continue }
-                    cg.beginPath()
-                    cg.move(to: points[0])
-                    for p in points.dropFirst() {
-                        cg.addLine(to: p)
-                    }
-                    cg.strokePath()
-                case .circle:
-                    let rect = CGRect(x: point.x - shapeSize / 2, y: point.y - shapeSize / 2, width: shapeSize, height: shapeSize)
-                    cg.strokeEllipse(in: rect)
-                case .rectangle:
-                    let rect = CGRect(x: point.x - shapeSize / 2, y: point.y - shapeSize / 2, width: shapeSize, height: shapeSize)
-                    cg.stroke(rect)
-                case .arrow:
-                    let start = CGPoint(x: point.x - shapeSize * 0.45, y: point.y + shapeSize * 0.45)
-                    let end = CGPoint(x: point.x, y: point.y)
-                    cg.beginPath()
-                    cg.move(to: start)
-                    cg.addLine(to: end)
-                    cg.strokePath()
-
-                    let head = shapeSize * 0.22
-                    cg.beginPath()
-                    cg.move(to: end)
-                    cg.addLine(to: CGPoint(x: end.x - head, y: end.y + head * 0.65))
-                    cg.move(to: end)
-                    cg.addLine(to: CGPoint(x: end.x - head * 0.25, y: end.y + head))
-                    cg.strokePath()
+                guard points.count > 1 else { continue }
+                cg.beginPath()
+                cg.move(to: points[0])
+                for p in points.dropFirst() {
+                    cg.addLine(to: p)
                 }
+                cg.strokePath()
             }
         }
         guard let data = image.jpegData(compressionQuality: 0.85) else {

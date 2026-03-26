@@ -9,12 +9,12 @@ struct ScreenshotToTicketApp: App {
             TabView {
                 MainView()
                     .tabItem {
-                        Text("Add ticket")
+                        Label("Add ticket", systemImage: "plus.rectangle.on.rectangle")
                     }
 
                 SettingsView()
                     .tabItem {
-                        Text("Settings")
+                        Label("Settings", systemImage: "gearshape")
                     }
             }
             .environmentObject(settings)

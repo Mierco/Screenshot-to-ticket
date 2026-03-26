@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		1D4F826781DAA7E3605FAE8D /* VideoThumbnail.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87524FB5F935302679584954 /* VideoThumbnail.swift */; };
+		51E7A4D8B659B7F4134E803D /* AppBuildInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2E4603B28592B6E46927B63 /* AppBuildInfo.swift */; };
 		5F8C8DD4D37E107B193CF39E /* SettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 176EEB3BA9611F7BD966ED4A /* SettingsStore.swift */; };
 		6597BDE8443C045F35E47164 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 59383BCCAFF9AF2E79A75C45 /* Assets.xcassets */; };
 		733CCBC1C03FCA52667B675E /* OpenAIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7230FE800604B4CF274BBAE7 /* OpenAIClient.swift */; };
@@ -38,6 +39,7 @@
 		C058B94D20F86A294C6819E0 /* KeychainService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainService.swift; sourceTree = "<group>"; };
 		C16821E27290D3091F9986C6 /* ScreenshotToTicketApp.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = ScreenshotToTicketApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		E018A88D0435431F76C08260 /* JiraModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JiraModels.swift; sourceTree = "<group>"; };
+		E2E4603B28592B6E46927B63 /* AppBuildInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppBuildInfo.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -53,6 +55,7 @@
 		1F6E4D48E3BD6E11F573B134 /* Utils */ = {
 			isa = PBXGroup;
 			children = (
+				E2E4603B28592B6E46927B63 /* AppBuildInfo.swift */,
 				6F114D0E2F52E49BD21FD886 /* ImageCompression.swift */,
 				BB87F033C2D95DE8997513C2 /* SemanticVersion.swift */,
 				87524FB5F935302679584954 /* VideoThumbnail.swift */,
@@ -135,6 +138,7 @@
 			buildPhases = (
 				F0DA57B36C14A3DD86C1941D /* Sources */,
 				7F3CB8F8DC4EE924155CE56F /* Resources */,
+				A965FC05438D47BF40270C02 /* Stamp build metadata */,
 			);
 			buildRules = (
 			);
@@ -163,7 +167,6 @@
 				};
 			};
 			buildConfigurationList = 013D34D79361DD8E40067DCD /* Build configuration list for PBXProject "ScreenshotToTicketApp" */;
-			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -173,6 +176,7 @@
 			mainGroup = DD8FD1FA3E106F16CFBCA6EC;
 			minimizedProjectReferenceProxies = 1;
 			preferredProjectObjectVersion = 77;
+			productRefGroup = 8FDAC7C27FABD49A1B623B83 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -192,11 +196,33 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
+/* Begin PBXShellScriptBuildPhase section */
+		A965FC05438D47BF40270C02 /* Stamp build metadata */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Stamp build metadata";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -eu\n\nBUILD_INFO_PATH=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/BuildInfo.json\"\n\nif git -C \"${SRCROOT}\" rev-parse --is-inside-work-tree >/dev/null 2>&1; then\n  BUILD_NUMBER=\"$(git -C \"${SRCROOT}\" rev-list --count HEAD)\"\n  COMMIT_SHA=\"$(git -C \"${SRCROOT}\" rev-parse --short HEAD)\"\nelse\n  BUILD_NUMBER=\"${CURRENT_PROJECT_VERSION:-1}\"\n  COMMIT_SHA=\"unknown\"\nfi\n\ncat > \"${BUILD_INFO_PATH}\" <<EOF\n{\"buildNumber\":\"${BUILD_NUMBER}\",\"gitCommitSHA\":\"${COMMIT_SHA}\"}\nEOF\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		F0DA57B36C14A3DD86C1941D /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				51E7A4D8B659B7F4134E803D /* AppBuildInfo.swift in Sources */,
 				ABD35C1444B071BED3004BE5 /* ImageCompression.swift in Sources */,
 				BD5A0907FEF72D279FDF2504 /* JiraClient.swift in Sources */,
 				B2AFC818573B13FEFF74166B /* JiraModels.swift in Sources */,

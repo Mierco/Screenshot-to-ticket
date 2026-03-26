@@ -32,40 +32,63 @@ struct MainView: View {
                         Toggle("Enable markups on screenshots", isOn: $vm.enableMarkup)
 
                         if vm.enableMarkup {
-                            Picker("Shape", selection: $vm.selectedShape) {
-                                ForEach(MainViewModel.AnnotationShape.allCases) { shape in
-                                    Text(shape.rawValue).tag(shape)
-                                }
-                            }
-                            .pickerStyle(.segmented)
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("Color")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
 
-                            ScrollView(.horizontal, showsIndicators: false) {
-                                HStack(spacing: 10) {
-                                    ForEach(MainViewModel.AnnotationColor.allCases) { color in
-                                        Button {
-                                            vm.selectedColor = color
-                                        } label: {
-                                            ZStack {
-                                                Circle()
-                                                    .fill(color.swatch)
-                                                    .frame(width: 26, height: 26)
-                                                if vm.selectedColor == color {
+                                ScrollView(.horizontal, showsIndicators: false) {
+                                    HStack(spacing: 10) {
+                                        ForEach(MainViewModel.AnnotationColor.allCases) { color in
+                                            Button {
+                                                vm.selectedColor = color
+                                            } label: {
+                                                ZStack {
                                                     Circle()
-                                                        .stroke(.primary, lineWidth: 2)
-                                                        .frame(width: 34, height: 34)
+                                                        .fill(color.swatch)
+                                                        .frame(width: 26, height: 26)
+                                                    if vm.selectedColor == color {
+                                                        Circle()
+                                                            .stroke(.primary, lineWidth: 2)
+                                                            .frame(width: 34, height: 34)
+                                                    }
                                                 }
+                                                .frame(width: 36, height: 36)
                                             }
-                                            .frame(width: 36, height: 36)
+                                            .buttonStyle(.plain)
+                                            .padding(.vertical, 2)
+                                            .accessibilityLabel(color.rawValue)
                                         }
-                                        .buttonStyle(.plain)
-                                        .padding(.vertical, 2)
-                                        .accessibilityLabel(color.rawValue)
                                     }
+                                    .padding(.vertical, 4)
                                 }
-                                .padding(.vertical, 4)
                             }
 
-                            Text(vm.selectedShape == .freehand ? "Drag on each screenshot to draw a highlight." : "Tap on each screenshot to place a marker.")
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack {
+                                    Text("Opacity")
+                                    Spacer()
+                                    Text("\(Int((vm.markupOpacity * 100).rounded()))%")
+                                        .foregroundStyle(.secondary)
+                                }
+                                .font(.caption)
+
+                                Slider(value: $vm.markupOpacity, in: 0.1...1.0, step: 0.05)
+                            }
+
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack {
+                                    Text("Canvas size")
+                                    Spacer()
+                                    Text("\(Int((vm.markupCanvasScale * 100).rounded()))%")
+                                        .foregroundStyle(.secondary)
+                                }
+                                .font(.caption)
+
+                                Slider(value: $vm.markupCanvasScale, in: 0.8...1.6, step: 0.05)
+                            }
+
+                            Text("Drag on each screenshot to draw a freehand highlight. Increase canvas size for more detail; wider canvases can be panned horizontally.")
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
 
@@ -75,21 +98,14 @@ struct MainView: View {
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
 
-                                    AnnotationCanvasView(
+                                    ResizableAnnotationCanvasView(
                                         image: media.previewImage,
                                         marks: vm.marksByMediaID[media.id] ?? [],
                                         interactive: media.isImage,
-                                        selectedShape: vm.selectedShape
-                                    ) { point in
-                                        vm.addMark(mediaID: media.id, normalizedPoint: point)
-                                    } onFreehandPoint: { point, isStart in
+                                        opacity: vm.markupOpacity,
+                                        canvasScale: vm.markupCanvasScale
+                                    ) { point, isStart in
                                         vm.addFreehandPoint(mediaID: media.id, normalizedPoint: point, beginStroke: isStart)
-                                    }
-                                    .frame(height: 220)
-                                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                                    .overlay {
-                                        RoundedRectangle(cornerRadius: 10)
-                                            .stroke(Color.secondary.opacity(0.25), lineWidth: 1)
                                     }
 
                                     if media.isImage {
@@ -104,6 +120,7 @@ struct MainView: View {
                                             .foregroundStyle(.secondary)
                                     }
                                 }
+                                .listRowInsets(EdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 8))
                             }
                         }
                     }
@@ -147,8 +164,23 @@ struct MainView: View {
                     }
                 }
             }
-            .navigationTitle("Screenshot to Jira")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .principal) {
+                    HStack(spacing: 8) {
+                        Text("Screenshot to Jira")
+                            .font(.headline)
+
+                        Text(AppBuildInfo.badgeText)
+                            .font(.caption.monospaced())
+                            .foregroundStyle(.secondary)
+                    }
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel("Screenshot to Jira, \(AppBuildInfo.badgeText)")
+                }
+
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Settings") { showingSettings = true }
                 }
@@ -164,12 +196,107 @@ struct MainView: View {
     }
 }
 
+private struct ResizableAnnotationCanvasView: View {
+    let image: UIImage
+    let marks: [MainViewModel.AnnotationMark]
+    let interactive: Bool
+    let opacity: Double
+    let canvasScale: Double
+    let onFreehandPoint: (CGPoint, Bool) -> Void
+
+    @State private var availableWidth = max(280, UIScreen.main.bounds.width - 32)
+
+    var body: some View {
+        let canvasSize = calculatedCanvasSize(for: image, availableWidth: availableWidth, scale: canvasScale)
+
+        ScrollView(.horizontal, showsIndicators: canvasSize.width > availableWidth + 1) {
+            HStack(spacing: 0) {
+                Spacer(minLength: 0)
+                AnnotationCanvasView(
+                    image: image,
+                    marks: marks,
+                    interactive: interactive,
+                    opacity: opacity,
+                    onFreehandPoint: onFreehandPoint
+                )
+                .frame(width: canvasSize.width, height: canvasSize.height)
+                Spacer(minLength: 0)
+            }
+            .frame(minWidth: availableWidth)
+        }
+        .background(WidthObserver(width: $availableWidth))
+        .frame(height: canvasSize.height)
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .overlay {
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(Color.secondary.opacity(0.25), lineWidth: 1)
+        }
+    }
+
+    private func calculatedCanvasSize(for image: UIImage, availableWidth: CGFloat, scale: Double) -> CGSize {
+        let natural = naturalPointSize(for: image)
+        guard natural.width > 0, natural.height > 0 else {
+            return CGSize(width: max(availableWidth, 280), height: 360)
+        }
+
+        let baseWidth = max(availableWidth, 280)
+        let aspect = natural.width / natural.height
+        let maxWidth = baseWidth * 2.4
+        let minHeight: CGFloat = 280
+        let maxHeight: CGFloat = 900
+
+        var width = min(baseWidth * CGFloat(scale), maxWidth)
+        var height = width / aspect
+
+        if height < minHeight {
+            width = min(max(width, minHeight * aspect), maxWidth)
+            height = width / aspect
+        }
+
+        if height > maxHeight {
+            height = maxHeight
+            width = height * aspect
+        }
+
+        return CGSize(width: max(width, 1), height: max(height, 1))
+    }
+
+    private func naturalPointSize(for image: UIImage) -> CGSize {
+        guard let cgImage = image.cgImage else { return image.size }
+        let screenScale = max(UIScreen.main.scale, 1)
+        return CGSize(
+            width: CGFloat(cgImage.width) / screenScale,
+            height: CGFloat(cgImage.height) / screenScale
+        )
+    }
+}
+
+private struct WidthObserver: View {
+    @Binding var width: CGFloat
+
+    var body: some View {
+        GeometryReader { proxy in
+            Color.clear
+                .onAppear {
+                    updateWidth(proxy.size.width)
+                }
+                .onChange(of: proxy.size.width) { newWidth in
+                    updateWidth(newWidth)
+                }
+        }
+    }
+
+    private func updateWidth(_ newWidth: CGFloat) {
+        guard newWidth > 0, abs(width - newWidth) > 0.5 else { return }
+        width = newWidth
+    }
+}
+
 private struct AnnotationCanvasView: View {
     let image: UIImage
     let marks: [MainViewModel.AnnotationMark]
     let interactive: Bool
-    let selectedShape: MainViewModel.AnnotationShape
-    let onTap: (CGPoint) -> Void
+    let opacity: Double
     let onFreehandPoint: (CGPoint, Bool) -> Void
 
     @State private var startedStroke = false
@@ -187,51 +314,22 @@ private struct AnnotationCanvasView: View {
                     .background(Color(.secondarySystemBackground))
 
                 ForEach(marks) { mark in
-                    if mark.shape == .freehand {
-                        freehandPath(mark.points, in: drawRect)
-                            .stroke(mark.color.swatch, style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
-                    } else if let point = mark.points.first {
-                        annotationShape(mark.shape)
-                            .stroke(mark.color.swatch, style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
-                            .frame(width: 42, height: 42)
-                            .position(
-                                x: drawRect.minX + (point.x * drawRect.width),
-                                y: drawRect.minY + (point.y * drawRect.height)
-                            )
-                    }
+                    freehandPath(mark.points, in: drawRect)
+                        .stroke(
+                            mark.color.swatch.opacity(opacity),
+                            style: StrokeStyle(lineWidth: lineWidth(in: drawRect), lineCap: .round, lineJoin: .round)
+                        )
                 }
             }
             .contentShape(Rectangle())
             .modifier(
                 AnnotationInteractionModifier(
                     interactive: interactive,
-                    selectedShape: selectedShape,
                     drawRect: drawRect,
-                    onTap: onTap,
                     onFreehandPoint: onFreehandPoint,
                     startedStroke: $startedStroke
                 )
             )
-        }
-    }
-
-    private func annotationShape(_ shape: MainViewModel.AnnotationShape) -> Path {
-        switch shape {
-        case .freehand:
-            return Path()
-        case .circle:
-            return Path(ellipseIn: CGRect(x: 0, y: 0, width: 42, height: 42))
-        case .rectangle:
-            return Path(CGRect(x: 0, y: 0, width: 42, height: 42))
-        case .arrow:
-            var path = Path()
-            path.move(to: CGPoint(x: 4, y: 38))
-            path.addLine(to: CGPoint(x: 33, y: 10))
-            path.move(to: CGPoint(x: 33, y: 10))
-            path.addLine(to: CGPoint(x: 33, y: 23))
-            path.move(to: CGPoint(x: 33, y: 10))
-            path.addLine(to: CGPoint(x: 20, y: 10))
-            return path
         }
     }
 
@@ -253,6 +351,10 @@ private struct AnnotationCanvasView: View {
             )
         }
         return path
+    }
+
+    private func lineWidth(in drawRect: CGRect) -> CGFloat {
+        max(3, min(drawRect.width, drawRect.height) * 0.008)
     }
 
     private func aspectFitRect(imageSize: CGSize, in bounds: CGRect) -> CGRect {
@@ -277,23 +379,16 @@ private struct AnnotationCanvasView: View {
 
 private struct AnnotationInteractionModifier: ViewModifier {
     let interactive: Bool
-    let selectedShape: MainViewModel.AnnotationShape
     let drawRect: CGRect
-    let onTap: (CGPoint) -> Void
     let onFreehandPoint: (CGPoint, Bool) -> Void
     @Binding var startedStroke: Bool
 
     func body(content: Content) -> some View {
         content
-            .onTapGesture { location in
-                guard interactive, selectedShape != .freehand else { return }
-                guard let normalized = normalize(location) else { return }
-                onTap(normalized)
-            }
             .gesture(
                 DragGesture(minimumDistance: 0)
                     .onChanged { value in
-                        guard interactive, selectedShape == .freehand else { return }
+                        guard interactive else { return }
                         guard let normalized = normalize(value.location) else { return }
                         onFreehandPoint(normalized, !startedStroke)
                         startedStroke = true

@@ -93,6 +93,37 @@ struct SettingsView: View {
                     TextField("Model ID", text: $settings.model)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
+
+                    Picker("Thinking", selection: $settings.reasoningEffort) {
+                        ForEach(SettingsStore.ReasoningEffort.allCases) { effort in
+                            Text(effort.label).tag(effort)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                }
+
+                Section {
+                    TextEditor(text: $settings.ticketPrompt)
+                        .font(.system(.footnote, design: .monospaced))
+                        .frame(minHeight: 220)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+
+                    if !settings.isTicketPromptValid {
+                        Text("Ticket prompt cannot be empty.")
+                            .font(.footnote)
+                            .foregroundStyle(.red)
+                    }
+
+                    Button("Reset to Default Prompt") {
+                        settings.resetTicketPromptToDefault()
+                        saveMessage = ""
+                    }
+                    .disabled(settings.isUsingDefaultTicketPrompt)
+                } header: {
+                    Text("Ticket Prompt")
+                } footer: {
+                    Text("This base prompt is combined with the hints/instructions from the main screen.")
                 }
 
                 Section {

@@ -1,6 +1,21 @@
 import Foundation
 
 struct OpenAIClient {
+    static let defaultTicketPrompt = """
+You create Jira Bug tickets from screenshot evidence.
+Return ONLY valid JSON with this schema:
+{"summary":"string","description":"string"}
+
+Rules:
+- Summary max 120 chars.
+- Description should include: Observed behavior, Expected behavior, Steps to reproduce, Impact.
+- Treat user-added markups on screenshots, such as highlighted areas, circles, arrows, rectangles, or freehand markings, as explicit instructions about what to focus on.
+- Prioritize marked areas when deciding the bug, affected UI element, and expected behavior.
+- Use user notes as instruction and include them naturally in the draft.
+- Do not invent facts that are not visible or provided. If a detail is unclear, say so briefly.
+- If there are multiple screenshots, synthesize them into one coherent bug report.
+"""
+
     struct ResponseEnvelope: Decodable {
         struct OutputItem: Decodable {
             struct ContentItem: Decodable {
@@ -14,6 +29,8 @@ struct OpenAIClient {
 
     let apiKey: String
     let model: String
+    let reasoningEffort: SettingsStore.ReasoningEffort
+    let ticketPrompt: String
 
     func draftTicket(from images: [Data], userHint: String) async throws -> TicketDraft {
         var content: [[String: Any]] = [[
@@ -32,6 +49,9 @@ struct OpenAIClient {
 
         let payload: [String: Any] = [
             "model": model,
+            "reasoning": [
+                "effort": reasoningEffort.rawValue
+            ],
             "input": [[
                 "role": "user",
                 "content": content
@@ -61,19 +81,15 @@ struct OpenAIClient {
     }
 
     private func prompt(userHint: String) -> String {
-        let hintSection = userHint.isEmpty ? "No extra user notes." : "User notes/instructions (must influence output): \(userHint)"
-        return """
-You create Jira Bug tickets from screenshot evidence.
-Return ONLY valid JSON with this schema:
-{"summary":"string","description":"string"}
+        let basePrompt = ticketPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? Self.defaultTicketPrompt
+            : ticketPrompt
+        let trimmedUserHint = userHint.trimmingCharacters(in: .whitespacesAndNewlines)
+        let hintSection = trimmedUserHint.isEmpty
+            ? "No extra user notes."
+            : "User notes/instructions (must influence output): \(trimmedUserHint)"
 
-Rules:
-- Summary max 120 chars.
-- Description should include: Observed behavior, Expected behavior, Steps to reproduce, Impact.
-- Use user notes as instruction and include them naturally in the draft.
-
-\(hintSection)
-"""
+        return "\(basePrompt.trimmingCharacters(in: .whitespacesAndNewlines))\n\n\(hintSection)"
     }
 
     private func parseDraft(_ text: String) -> TicketDraft {
