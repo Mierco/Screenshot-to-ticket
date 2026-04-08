@@ -6,6 +6,7 @@ struct MainView: View {
     @EnvironmentObject private var settings: SettingsStore
     @StateObject private var vm = MainViewModel()
     @State private var showingSettings = false
+    @State private var showingAbout = false
 
     var body: some View {
         NavigationStack {
@@ -150,12 +151,23 @@ struct MainView: View {
             .navigationTitle("Screenshot to Jira")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Settings") { showingSettings = true }
+                    Button {
+                        showingAbout = true
+                    } label: {
+                        Text("About")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(
+                                LinearGradient(
+                                    colors: [Color(red: 0.2, green: 0.5, blue: 1.0), Color(red: 0.4, green: 0.7, blue: 1.0)],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
+                    }
                 }
             }
-            .sheet(isPresented: $showingSettings) {
-                SettingsView()
-                    .environmentObject(settings)
+            .sheet(isPresented: $showingAbout) {
+                AboutView()
             }
         }
         .onChange(of: vm.selectedItems) { _ in
