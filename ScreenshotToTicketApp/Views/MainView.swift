@@ -4,6 +4,7 @@ import UIKit
 
 struct MainView: View {
     @EnvironmentObject private var settings: SettingsStore
+    @EnvironmentObject private var shareImportCoordinator: ShareImportCoordinator
     @StateObject private var vm = MainViewModel()
 
     var body: some View {
@@ -12,10 +13,9 @@ struct MainView: View {
                 Section("Media") {
                     PhotosPicker(
                         selection: $vm.selectedItems,
-                        maxSelectionCount: 3,
                         matching: .any(of: [.images, .videos])
                     ) {
-                        Text("Select up to 3 images or videos")
+                        Text("Select images or videos")
                     }
 
                     if vm.isLoadingMedia {
@@ -150,6 +150,12 @@ struct MainView: View {
         }
         .onChange(of: vm.selectedItems) { _ in
             Task { await vm.refreshSelectedMedia() }
+        }
+        .task {
+            await vm.importSharedMediaIfAvailable()
+        }
+        .task(id: shareImportCoordinator.importToken) {
+            await vm.importSharedMediaIfAvailable()
         }
     }
 }

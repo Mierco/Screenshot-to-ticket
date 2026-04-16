@@ -76,6 +76,28 @@ final class MainViewModel: ObservableObject {
         var isImage: Bool { kind == .image }
     }
 
+    private struct LoadedMediaBatch {
+        let media: [LoadedMedia]
+        let warning: String?
+    }
+
+    private enum MediaImportError: LocalizedError {
+        case unsupportedType
+        case unreadableMedia
+        case noSupportedMedia
+
+        var errorDescription: String? {
+            switch self {
+            case .unsupportedType:
+                return "Only photos and videos are supported."
+            case .unreadableMedia:
+                return "The selected media could not be read."
+            case .noSupportedMedia:
+                return "No supported photos or videos were found."
+            }
+        }
+    }
+
     @Published var selectedItems: [PhotosPickerItem] = []
     @Published var mediaItems: [LoadedMedia] = []
     @Published var hintText: String = ""
@@ -93,16 +115,40 @@ final class MainViewModel: ObservableObject {
         isLoadingMedia = true
         defer { isLoadingMedia = false }
         do {
-            mediaItems = try await loadMedia(from: Array(selectedItems.prefix(3)))
-            var nextMarks: [UUID: [AnnotationMark]] = [:]
-            for media in mediaItems where media.isImage {
-                nextMarks[media.id] = []
-            }
-            marksByMediaID = nextMarks
+            let batch = try await loadMedia(from: selectedItems)
+            applyLoadedMedia(batch.media)
+            issueURL = nil
+            status = batch.warning ?? ""
         } catch {
             mediaItems = []
             marksByMediaID = [:]
             status = "Failed to load media: \(error.localizedDescription)"
+        }
+    }
+
+    func importSharedMediaIfAvailable() async {
+        do {
+            let sharedFileURLs = try SharedMediaInbox.takePendingFiles()
+            let sharedNotice = SharedMediaInbox.consumePendingImportNotice()
+            guard !sharedFileURLs.isEmpty || sharedNotice != nil else { return }
+
+            guard !sharedFileURLs.isEmpty else {
+                if let sharedNotice {
+                    status = sharedNotice
+                }
+                return
+            }
+
+            isLoadingMedia = true
+            defer { isLoadingMedia = false }
+
+            let batch = try loadMedia(from: sharedFileURLs)
+            selectedItems = []
+            applyLoadedMedia(batch.media)
+            issueURL = nil
+            status = combinedNotice(sharedNotice, batch.warning) ?? ""
+        } catch {
+            status = "Failed to import shared media: \(error.localizedDescription)"
         }
     }
 
@@ -219,42 +265,81 @@ final class MainViewModel: ObservableObject {
         }
     }
 
-    private func loadMedia(from items: [PhotosPickerItem]) async throws -> [LoadedMedia] {
+    private func loadMedia(from items: [PhotosPickerItem]) async throws -> LoadedMediaBatch {
+        guard !items.isEmpty else {
+            return LoadedMediaBatch(media: [], warning: nil)
+        }
+
         var result: [LoadedMedia] = []
+        var failures = 0
+        var lastError: Error?
+
         for (index, item) in items.enumerated() {
-            if let data = try await item.loadTransferable(type: Data.self) {
-                let isVideo = item.supportedContentTypes.contains {
-                    $0.conforms(to: .movie) || $0.conforms(to: .video) || $0.conforms(to: .audiovisualContent)
+            do {
+                guard let data = try await item.loadTransferable(type: Data.self) else {
+                    throw MediaImportError.unreadableMedia
                 }
-                if isVideo {
-                    let preview = VideoThumbnail.jpegPreview(from: data).flatMap(UIImage.init(data:)) ?? UIImage()
-                    result.append(
-                        LoadedMedia(
-                            kind: .video,
-                            originalData: data,
-                            previewImage: preview,
-                            fileName: "attachment-\(index + 1).mp4",
-                            contentType: "video/mp4",
-                            aiPreviewJPEG: VideoThumbnail.jpegPreview(from: data)
-                        )
-                    )
-                } else {
-                    let jpeg = ImageCompression.compressedJPEG(data)
-                    guard let image = UIImage(data: jpeg) else { continue }
-                    result.append(
-                        LoadedMedia(
-                            kind: .image,
-                            originalData: jpeg,
-                            previewImage: image,
-                            fileName: "attachment-\(index + 1).jpg",
-                            contentType: "image/jpeg",
-                            aiPreviewJPEG: jpeg
-                        )
-                    )
+
+                guard let contentType = preferredContentType(for: item.supportedContentTypes) else {
+                    throw MediaImportError.unsupportedType
                 }
+
+                result.append(
+                    try makeLoadedMedia(
+                        data: data,
+                        contentType: contentType,
+                        suggestedFileName: nil,
+                        index: index
+                    )
+                )
+            } catch {
+                failures += 1
+                lastError = error
             }
         }
-        return result
+
+        return try finalizeLoadedMediaBatch(
+            result,
+            failures: failures,
+            lastError: lastError
+        )
+    }
+
+    private func loadMedia(from fileURLs: [URL]) throws -> LoadedMediaBatch {
+        guard !fileURLs.isEmpty else {
+            return LoadedMediaBatch(media: [], warning: nil)
+        }
+
+        var result: [LoadedMedia] = []
+        var failures = 0
+        var lastError: Error?
+
+        for (index, fileURL) in fileURLs.enumerated() {
+            do {
+                let data = try Data(contentsOf: fileURL, options: [.mappedIfSafe])
+                guard let contentType = contentType(for: fileURL) else {
+                    throw MediaImportError.unsupportedType
+                }
+
+                result.append(
+                    try makeLoadedMedia(
+                        data: data,
+                        contentType: contentType,
+                        suggestedFileName: fileURL.lastPathComponent,
+                        index: index
+                    )
+                )
+            } catch {
+                failures += 1
+                lastError = error
+            }
+        }
+
+        return try finalizeLoadedMediaBatch(
+            result,
+            failures: failures,
+            lastError: lastError
+        )
     }
 
     private func loadAttachmentsFromPreparedMedia() throws -> [Attachment] {
@@ -360,5 +445,123 @@ final class MainViewModel: ObservableObject {
             x: min(max(point.x, 0), 1),
             y: min(max(point.y, 0), 1)
         )
+    }
+
+    private func applyLoadedMedia(_ media: [LoadedMedia]) {
+        mediaItems = media
+
+        var nextMarks: [UUID: [AnnotationMark]] = [:]
+        for item in media where item.isImage {
+            nextMarks[item.id] = []
+        }
+        marksByMediaID = nextMarks
+    }
+
+    private func finalizeLoadedMediaBatch(
+        _ media: [LoadedMedia],
+        failures: Int,
+        lastError: Error?
+    ) throws -> LoadedMediaBatch {
+        if media.isEmpty {
+            if failures > 0 {
+                throw lastError ?? MediaImportError.noSupportedMedia
+            }
+            return LoadedMediaBatch(media: [], warning: nil)
+        }
+
+        let warning = failures > 0 ? "Some selected items could not be imported." : nil
+        return LoadedMediaBatch(media: media, warning: warning)
+    }
+
+    private func preferredContentType(for contentTypes: [UTType]) -> UTType? {
+        contentTypes.first {
+            $0.conforms(to: .movie) || $0.conforms(to: .video) || $0.conforms(to: .audiovisualContent)
+        } ?? contentTypes.first {
+            $0.conforms(to: .image)
+        }
+    }
+
+    private func contentType(for fileURL: URL) -> UTType? {
+        if let resourceValues = try? fileURL.resourceValues(forKeys: [.contentTypeKey]),
+           let resourceType = resourceValues.contentType {
+            return resourceType
+        }
+
+        if !fileURL.pathExtension.isEmpty {
+            return UTType(filenameExtension: fileURL.pathExtension)
+        }
+
+        return nil
+    }
+
+    private func makeLoadedMedia(
+        data: Data,
+        contentType: UTType,
+        suggestedFileName: String?,
+        index: Int
+    ) throws -> LoadedMedia {
+        if contentType.conforms(to: .movie)
+            || contentType.conforms(to: .video)
+            || contentType.conforms(to: .audiovisualContent) {
+            let previewJPEG = VideoThumbnail.jpegPreview(from: data)
+            let previewImage = previewJPEG.flatMap(UIImage.init(data:)) ?? UIImage()
+            return LoadedMedia(
+                kind: .video,
+                originalData: data,
+                previewImage: previewImage,
+                fileName: makeFileName(
+                    suggestedFileName: suggestedFileName,
+                    defaultStem: "attachment-\(index + 1)",
+                    defaultExtension: contentType.preferredFilenameExtension ?? "mov"
+                ),
+                contentType: contentType.preferredMIMEType ?? "video/quicktime",
+                aiPreviewJPEG: previewJPEG
+            )
+        }
+
+        guard contentType.conforms(to: .image) else {
+            throw MediaImportError.unsupportedType
+        }
+
+        let jpeg = ImageCompression.compressedJPEG(data)
+        guard let image = UIImage(data: jpeg) else {
+            throw MediaImportError.unreadableMedia
+        }
+
+        return LoadedMedia(
+            kind: .image,
+            originalData: jpeg,
+            previewImage: image,
+            fileName: makeFileName(
+                suggestedFileName: suggestedFileName,
+                defaultStem: "attachment-\(index + 1)",
+                defaultExtension: "jpg"
+            ),
+            contentType: "image/jpeg",
+            aiPreviewJPEG: jpeg
+        )
+    }
+
+    private func makeFileName(
+        suggestedFileName: String?,
+        defaultStem: String,
+        defaultExtension: String
+    ) -> String {
+        guard let suggestedFileName, !suggestedFileName.isEmpty else {
+            return "\(defaultStem).\(defaultExtension)"
+        }
+
+        let baseURL = URL(fileURLWithPath: suggestedFileName)
+        let stem = baseURL.deletingPathExtension().lastPathComponent
+        let ext = baseURL.pathExtension.isEmpty ? defaultExtension : baseURL.pathExtension
+        return "\(stem.isEmpty ? defaultStem : stem).\(ext)"
+    }
+
+    private func combinedNotice(_ first: String?, _ second: String?) -> String? {
+        let notices = [first, second]
+            .compactMap { $0 }
+            .filter { !$0.isEmpty }
+        guard !notices.isEmpty else { return nil }
+        return Array(NSOrderedSet(array: notices)).compactMap { $0 as? String }.joined(separator: "\n")
     }
 }

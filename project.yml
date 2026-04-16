@@ -18,12 +18,49 @@ targets:
       path: ScreenshotToTicketApp/Info.plist
       properties:
         CFBundleDisplayName: ScreenshotToTicket
+        CFBundleURLTypes:
+          - CFBundleURLName: com.iagentur.screenshottoticket
+            CFBundleURLSchemes:
+              - screenshottoticket
         UILaunchScreen: {}
         NSPhotoLibraryUsageDescription: Needed to pick screenshots to attach to Jira issues.
     settings:
       base:
+        CODE_SIGN_ENTITLEMENTS: ScreenshotToTicketApp/ScreenshotToTicketApp.entitlements
         INFOPLIST_FILE: ScreenshotToTicketApp/Info.plist
         PRODUCT_NAME: ScreenshotToTicketApp
         TARGETED_DEVICE_FAMILY: 1
+    dependencies:
+      - target: ScreenshotToTicketShareExtension
+        embed: true
     scheme:
       testTargets: []
+  ScreenshotToTicketShareExtension:
+    type: app-extension
+    platform: iOS
+    sources:
+      - ScreenshotToTicketShareExtension
+      - path: ScreenshotToTicketApp/Shared
+    info:
+      path: ScreenshotToTicketShareExtension/Info.plist
+      properties:
+        CFBundleDisplayName: Import to ScreenshotToTicket
+        NSExtension:
+          NSExtensionAttributes:
+            NSExtensionActivationSupportsImageWithMaxCount: 100
+            NSExtensionActivationSupportsMovieWithMaxCount: 100
+          NSExtensionPointIdentifier: com.apple.share-services
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShareViewController
+    settings:
+      base:
+        APPLICATION_EXTENSION_API_ONLY: YES
+        CODE_SIGN_ENTITLEMENTS: ScreenshotToTicketShareExtension/ScreenshotToTicketShareExtension.entitlements
+        INFOPLIST_FILE: ScreenshotToTicketShareExtension/Info.plist
+        LD_RUNPATH_SEARCH_PATHS:
+          - $(inherited)
+          - "@executable_path/Frameworks"
+          - "@executable_path/../../Frameworks"
+        PRODUCT_BUNDLE_IDENTIFIER: com.iagentur.screenshottoticket.shareextension
+        PRODUCT_NAME: ScreenshotToTicketShareExtension
+        SKIP_INSTALL: YES
+        TARGETED_DEVICE_FAMILY: 1

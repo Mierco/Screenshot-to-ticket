@@ -8,29 +8,65 @@
 
 /* Begin PBXBuildFile section */
 		1D4F826781DAA7E3605FAE8D /* VideoThumbnail.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87524FB5F935302679584954 /* VideoThumbnail.swift */; };
+		2AF466EE22BD2B6694344D54 /* ScreenshotToTicketShareExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 3C31412CD8753867B01376AE /* ScreenshotToTicketShareExtension.appex */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		5F8C8DD4D37E107B193CF39E /* SettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 176EEB3BA9611F7BD966ED4A /* SettingsStore.swift */; };
 		6597BDE8443C045F35E47164 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 59383BCCAFF9AF2E79A75C45 /* Assets.xcassets */; };
 		733CCBC1C03FCA52667B675E /* OpenAIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7230FE800604B4CF274BBAE7 /* OpenAIClient.swift */; };
+		8E650941BDCBEBF941B3C219 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 144C3D0995132CB244E1C5AA /* ShareViewController.swift */; };
 		94348C197958F1FEB4C3E6EB /* MainView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E0C56AD66F9894B9F9D7163 /* MainView.swift */; };
+		9844D53E286D366417B22DD7 /* SharedMediaInbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0812869EFC7EAF7303D19C7A /* SharedMediaInbox.swift */; };
 		A0C6B2F163DAC472CA359F91 /* ScreenshotToTicketApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 231B69809F5849CDF4144BE3 /* ScreenshotToTicketApp.swift */; };
 		A61342881085525773EDAB3C /* KeychainService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C058B94D20F86A294C6819E0 /* KeychainService.swift */; };
 		ABD35C1444B071BED3004BE5 /* ImageCompression.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F114D0E2F52E49BD21FD886 /* ImageCompression.swift */; };
 		B2AFC818573B13FEFF74166B /* JiraModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = E018A88D0435431F76C08260 /* JiraModels.swift */; };
+		BAEC59E3416071D46356F1CA /* ShareImportCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45EC8BBCA624F9D77B81EF1E /* ShareImportCoordinator.swift */; };
 		BD5A0907FEF72D279FDF2504 /* JiraClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8ADD915877A0B9DAB14B3FD1 /* JiraClient.swift */; };
 		CA7C1ADE7C7DAF426A81C4C6 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0305AAFF95DEB4201E5F76F /* SettingsView.swift */; };
 		D718CADA8F6F4592E7EA8F18 /* MainViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41A408B5FD61997ADD7734FC /* MainViewModel.swift */; };
+		E0502F0F13188DE367042FFB /* SharedMediaInbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0812869EFC7EAF7303D19C7A /* SharedMediaInbox.swift */; };
 		FA0E261786A8CB0124F25955 /* SemanticVersion.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB87F033C2D95DE8997513C2 /* SemanticVersion.swift */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		D2E52B9A6AC734CD4093064A /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 0EC08B5B5ABA2A22063E05D6 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 8BE668727AC9C974AB8B617A;
+			remoteInfo = ScreenshotToTicketShareExtension;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		C4EE7EF380B8F31630C7656F /* Embed App Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				2AF466EE22BD2B6694344D54 /* ScreenshotToTicketShareExtension.appex in Embed App Extensions */,
+			);
+			name = "Embed App Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
+		0812869EFC7EAF7303D19C7A /* SharedMediaInbox.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SharedMediaInbox.swift; sourceTree = "<group>"; };
+		12D1A788C89D5E8EF9416A96 /* ScreenshotToTicketApp.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = ScreenshotToTicketApp.entitlements; sourceTree = "<group>"; };
+		144C3D0995132CB244E1C5AA /* ShareViewController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ShareViewController.swift; sourceTree = "<group>"; };
 		176EEB3BA9611F7BD966ED4A /* SettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsStore.swift; sourceTree = "<group>"; };
 		22CECDEBDD2A42F4AFAD1AF7 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		231B69809F5849CDF4144BE3 /* ScreenshotToTicketApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotToTicketApp.swift; sourceTree = "<group>"; };
+		3C31412CD8753867B01376AE /* ScreenshotToTicketShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; name = ScreenshotToTicketShareExtension.appex; path = ScreenshotToTicketShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		41A408B5FD61997ADD7734FC /* MainViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainViewModel.swift; sourceTree = "<group>"; };
+		45EC8BBCA624F9D77B81EF1E /* ShareImportCoordinator.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ShareImportCoordinator.swift; sourceTree = "<group>"; };
 		59383BCCAFF9AF2E79A75C45 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		5E0C56AD66F9894B9F9D7163 /* MainView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainView.swift; sourceTree = "<group>"; };
 		6F114D0E2F52E49BD21FD886 /* ImageCompression.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageCompression.swift; sourceTree = "<group>"; };
 		7230FE800604B4CF274BBAE7 /* OpenAIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenAIClient.swift; sourceTree = "<group>"; };
+		73E83EA81E9FAE73B570A32F /* ScreenshotToTicketShareExtension.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = ScreenshotToTicketShareExtension.entitlements; sourceTree = "<group>"; };
+		757A1054E37BA86D6D598A30 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		87524FB5F935302679584954 /* VideoThumbnail.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoThumbnail.swift; sourceTree = "<group>"; };
 		8ADD915877A0B9DAB14B3FD1 /* JiraClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JiraClient.swift; sourceTree = "<group>"; };
 		A0305AAFF95DEB4201E5F76F /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
@@ -39,6 +75,16 @@
 		C16821E27290D3091F9986C6 /* ScreenshotToTicketApp.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = ScreenshotToTicketApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		E018A88D0435431F76C08260 /* JiraModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JiraModels.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		35922E8B9A7D91A83791504D /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
 		173E0C4864D208EEE7EA3113 /* Views */ = {
@@ -71,6 +117,8 @@
 				1F6E4D48E3BD6E11F573B134 /* Utils */,
 				900E057264230644D1FFEEAF /* ViewModels */,
 				173E0C4864D208EEE7EA3113 /* Views */,
+				FC7B2BB7129E0ED9F31652CC /* Shared */,
+				12D1A788C89D5E8EF9416A96 /* ScreenshotToTicketApp.entitlements */,
 			);
 			path = ScreenshotToTicketApp;
 			sourceTree = "<group>";
@@ -87,6 +135,7 @@
 			isa = PBXGroup;
 			children = (
 				231B69809F5849CDF4144BE3 /* ScreenshotToTicketApp.swift */,
+				45EC8BBCA624F9D77B81EF1E /* ShareImportCoordinator.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -106,6 +155,7 @@
 			isa = PBXGroup;
 			children = (
 				C16821E27290D3091F9986C6 /* ScreenshotToTicketApp.app */,
+				3C31412CD8753867B01376AE /* ScreenshotToTicketShareExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -118,31 +168,69 @@
 			path = ViewModels;
 			sourceTree = "<group>";
 		};
+		C660221CA47EDD0C63279DB4 /* ScreenshotToTicketShareExtension */ = {
+			isa = PBXGroup;
+			children = (
+				757A1054E37BA86D6D598A30 /* Info.plist */,
+				144C3D0995132CB244E1C5AA /* ShareViewController.swift */,
+				73E83EA81E9FAE73B570A32F /* ScreenshotToTicketShareExtension.entitlements */,
+			);
+			name = ScreenshotToTicketShareExtension;
+			path = ScreenshotToTicketShareExtension;
+			sourceTree = "<group>";
+		};
 		DD8FD1FA3E106F16CFBCA6EC = {
 			isa = PBXGroup;
 			children = (
 				2802596A22BCA5F3824FF362 /* ScreenshotToTicketApp */,
 				8FDAC7C27FABD49A1B623B83 /* Products */,
+				C660221CA47EDD0C63279DB4 /* ScreenshotToTicketShareExtension */,
 			);
+			sourceTree = "<group>";
+		};
+		FC7B2BB7129E0ED9F31652CC /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				0812869EFC7EAF7303D19C7A /* SharedMediaInbox.swift */,
+			);
+			name = Shared;
+			path = Shared;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		8BE668727AC9C974AB8B617A /* ScreenshotToTicketShareExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = FA46F113D90080D379B4FA68 /* Build configuration list for PBXNativeTarget "ScreenshotToTicketShareExtension" */;
+			buildPhases = (
+				EDC326AC964AA5690AA98EA9 /* Sources */,
+				35922E8B9A7D91A83791504D /* Frameworks */,
+				97B8EE00434EA12B40A20EED /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ScreenshotToTicketShareExtension;
+			productName = ScreenshotToTicketShareExtension;
+			productReference = 3C31412CD8753867B01376AE /* ScreenshotToTicketShareExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		F7340363C634848ACD2858B0 /* ScreenshotToTicketApp */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 23E374510D5FFB48B5C6587E /* Build configuration list for PBXNativeTarget "ScreenshotToTicketApp" */;
 			buildPhases = (
 				F0DA57B36C14A3DD86C1941D /* Sources */,
 				7F3CB8F8DC4EE924155CE56F /* Resources */,
+				C4EE7EF380B8F31630C7656F /* Embed App Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				076A279E2A09B75DD1A49E6E /* PBXTargetDependency */,
 			);
 			name = ScreenshotToTicketApp;
-			packageProductDependencies = (
-			);
 			productName = ScreenshotToTicketApp;
 			productReference = C16821E27290D3091F9986C6 /* ScreenshotToTicketApp.app */;
 			productType = "com.apple.product-type.application";
@@ -156,6 +244,10 @@
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
+					8BE668727AC9C974AB8B617A = {
+						DevelopmentTeam = HSYHBF5UDF;
+						ProvisioningStyle = Automatic;
+					};
 					F7340363C634848ACD2858B0 = {
 						DevelopmentTeam = HSYHBF5UDF;
 						ProvisioningStyle = Automatic;
@@ -173,10 +265,12 @@
 			mainGroup = DD8FD1FA3E106F16CFBCA6EC;
 			minimizedProjectReferenceProxies = 1;
 			preferredProjectObjectVersion = 77;
+			productRefGroup = 8FDAC7C27FABD49A1B623B83 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
 				F7340363C634848ACD2858B0 /* ScreenshotToTicketApp */,
+				8BE668727AC9C974AB8B617A /* ScreenshotToTicketShareExtension */,
 			);
 		};
 /* End PBXProject section */
@@ -190,9 +284,25 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		97B8EE00434EA12B40A20EED /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		EDC326AC964AA5690AA98EA9 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8E650941BDCBEBF941B3C219 /* ShareViewController.swift in Sources */,
+				9844D53E286D366417B22DD7 /* SharedMediaInbox.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		F0DA57B36C14A3DD86C1941D /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -209,16 +319,28 @@
 				5F8C8DD4D37E107B193CF39E /* SettingsStore.swift in Sources */,
 				CA7C1ADE7C7DAF426A81C4C6 /* SettingsView.swift in Sources */,
 				1D4F826781DAA7E3605FAE8D /* VideoThumbnail.swift in Sources */,
+				BAEC59E3416071D46356F1CA /* ShareImportCoordinator.swift in Sources */,
+				E0502F0F13188DE367042FFB /* SharedMediaInbox.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		076A279E2A09B75DD1A49E6E /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = ScreenshotToTicketShareExtension;
+			target = 8BE668727AC9C974AB8B617A /* ScreenshotToTicketShareExtension */;
+			targetProxy = D2E52B9A6AC734CD4093064A /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		2D89016C741089AEBF9D0CC9 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = ScreenshotToTicketApp/ScreenshotToTicketApp.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				INFOPLIST_FILE = ScreenshotToTicketApp/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -356,10 +478,54 @@
 			};
 			name = Debug;
 		};
+		D7A35EFAC196FC512C643275 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = ScreenshotToTicketShareExtension/ScreenshotToTicketShareExtension.entitlements;
+				INFOPLIST_FILE = ScreenshotToTicketShareExtension/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.iagentur.screenshottoticket.shareextension;
+				PRODUCT_NAME = ScreenshotToTicketShareExtension;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		E807B1D6171857BE74BFFAEB /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = ScreenshotToTicketShareExtension/ScreenshotToTicketShareExtension.entitlements;
+				INFOPLIST_FILE = ScreenshotToTicketShareExtension/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.iagentur.screenshottoticket.shareextension;
+				PRODUCT_NAME = ScreenshotToTicketShareExtension;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = 1;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
 		E9A61C09C11F1451B4E0E296 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = ScreenshotToTicketApp/ScreenshotToTicketApp.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				INFOPLIST_FILE = ScreenshotToTicketApp/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -392,6 +558,15 @@
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
+		};
+		FA46F113D90080D379B4FA68 /* Build configuration list for PBXNativeTarget "ScreenshotToTicketShareExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E807B1D6171857BE74BFFAEB /* Release */,
+				D7A35EFAC196FC512C643275 /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
 	};
