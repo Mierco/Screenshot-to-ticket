@@ -146,7 +146,23 @@ struct MainView: View {
                     }
                 }
             }
-            .navigationTitle("Screenshot to Jira")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    HStack(spacing: 8) {
+                        Text("Screenshot to Jira")
+                            .font(.headline)
+
+                        Text(AppBuildInfo.badgeText)
+                            .font(.caption.monospaced())
+                            .foregroundStyle(.secondary)
+                    }
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel("Screenshot to Jira, \(AppBuildInfo.badgeText)")
+                }
+            }
         }
         .onChange(of: vm.selectedItems) { _ in
             Task { await vm.refreshSelectedMedia() }

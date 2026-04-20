@@ -227,7 +227,7 @@ final class MainViewModel: ObservableObject {
             let draft = try await openAI.draftTicket(from: aiImages, userHint: hintText)
 
             let notes = hintText.isEmpty ? "" : "\n\nReporter notes:\n\(hintText)"
-            let description = draft.description + notes
+            let descriptionText = draft.description + notes
 
             let jira = JiraClient(
                 workspaceURL: settings.workspaceURL,
@@ -242,17 +242,32 @@ final class MainViewModel: ObservableObject {
             status = "Creating Jira issue..."
             let issue = try await jira.createIssue(
                 summary: draft.summary,
-                description: description,
+                description: jira.adfDescription(from: descriptionText),
                 fixVersionId: fixVersion?.id
             )
 
-            status = "Uploading attachments..."
+            status = "Uploading media..."
+            var uploadedAttachments: [JiraAttachmentMetadata] = []
             for attachment in attachments {
-                try await jira.attachFile(
+                let uploaded = try await jira.attachFile(
                     issueKey: issue.key,
                     data: attachment.data,
                     fileName: attachment.fileName,
                     contentType: attachment.contentType
+                )
+                uploadedAttachments.append(uploaded)
+            }
+
+            status = "Embedding media in description..."
+            do {
+                try await jira.updateIssueDescription(
+                    issueKey: issue.key,
+                    description: jira.adfDescription(from: descriptionText, attachments: uploadedAttachments)
+                )
+            } catch {
+                try await jira.updateIssueDescription(
+                    issueKey: issue.key,
+                    description: jira.adfDescriptionWithAttachmentLinks(from: descriptionText, attachments: uploadedAttachments)
                 )
             }
 

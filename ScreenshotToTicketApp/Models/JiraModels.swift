@@ -29,6 +29,14 @@ struct JiraIssueResponse: Decodable {
     let `self`: String
 }
 
+struct JiraAttachmentMetadata: Decodable {
+    let id: String
+    let filename: String
+    let mimeType: String?
+    let content: String?
+    let thumbnail: String?
+}
+
 struct TicketDraft {
     let summary: String
     let description: String

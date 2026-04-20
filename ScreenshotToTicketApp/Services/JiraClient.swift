@@ -52,13 +52,13 @@ struct JiraClient {
             .0
     }
 
-    func createIssue(summary: String, description: String, fixVersionId: String?) async throws -> JiraIssueResponse {
+    func createIssue(summary: String, description: [String: Any], fixVersionId: String?) async throws -> JiraIssueResponse {
         let endpoint = apiURL("/rest/api/3/issue")
         var fields: [String: Any] = [
             "project": ["key": projectKey],
             "issuetype": ["name": "Bug"],
             "summary": summary,
-            "description": adfDescription(from: description)
+            "description": description
         ]
 
         if let id = fixVersionId {
@@ -76,7 +76,23 @@ struct JiraClient {
         return try JSONDecoder().decode(JiraIssueResponse.self, from: data)
     }
 
-    func attachFile(issueKey: String, data: Data, fileName: String, contentType: String) async throws {
+    func updateIssueDescription(issueKey: String, description: [String: Any]) async throws {
+        let endpoint = apiURL("/rest/api/3/issue/\(issueKey)")
+        let payload: [String: Any] = [
+            "fields": [
+                "description": description
+            ]
+        ]
+
+        var request = try buildRequest(urlString: endpoint, method: "PUT")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: payload)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        try validate(response: response, data: data)
+    }
+
+    func attachFile(issueKey: String, data: Data, fileName: String, contentType: String) async throws -> JiraAttachmentMetadata {
         let endpoint = apiURL("/rest/api/3/issue/\(issueKey)/attachments")
         var request = try buildRequest(urlString: endpoint, method: "POST")
         request.setValue("no-check", forHTTPHeaderField: "X-Atlassian-Token")
@@ -92,6 +108,11 @@ struct JiraClient {
 
         let (data, response) = try await URLSession.shared.data(for: request)
         try validate(response: response, data: data)
+        let attachments = try JSONDecoder().decode([JiraAttachmentMetadata].self, from: data)
+        guard let first = attachments.first else {
+            throw NSError(domain: "Jira", code: 2, userInfo: [NSLocalizedDescriptionKey: "Attachment upload succeeded but returned no metadata"])
+        }
+        return first
     }
 
     private func buildRequest(urlString: String, method: String) throws -> URLRequest {
@@ -131,23 +152,114 @@ struct JiraClient {
         return body
     }
 
-    private func adfDescription(from text: String) -> [String: Any] {
-        let paragraphs: [[String: Any]] = text
-            .split(separator: "\n", omittingEmptySubsequences: false)
-            .map { line in
-                [
-                    "type": "paragraph",
-                    "content": [[
-                        "type": "text",
-                        "text": String(line)
-                    ]]
-                ]
+    func adfDescription(from text: String) -> [String: Any] {
+        [
+            "type": "doc",
+            "version": 1,
+            "content": adfParagraphs(from: text)
+        ]
+    }
+
+    func adfDescription(from text: String, attachments: [JiraAttachmentMetadata]) -> [String: Any] {
+        adfDescription(from: text, attachments: attachments, includeRichMedia: true)
+    }
+
+    func adfDescriptionWithAttachmentLinks(from text: String, attachments: [JiraAttachmentMetadata]) -> [String: Any] {
+        adfDescription(from: text, attachments: attachments, includeRichMedia: false)
+    }
+
+    private func adfDescription(from text: String, attachments: [JiraAttachmentMetadata], includeRichMedia: Bool) -> [String: Any] {
+        var content = adfParagraphs(from: text)
+
+        guard !attachments.isEmpty else {
+            return [
+                "type": "doc",
+                "version": 1,
+                "content": content
+            ]
+        }
+
+        content.append([
+            "type": "heading",
+            "attrs": ["level": 2],
+            "content": [[
+                "type": "text",
+                "text": "Media"
+            ]]
+        ])
+
+        for attachment in attachments {
+            if includeRichMedia, let mediaNode = adfMediaNode(for: attachment) {
+                content.append(mediaNode)
             }
+
+            if let url = attachment.content {
+                content.append(linkParagraph(text: attachment.filename, url: url))
+            } else {
+                content.append(paragraph(text: attachment.filename))
+            }
+        }
 
         return [
             "type": "doc",
             "version": 1,
-            "content": paragraphs
+            "content": content
+        ]
+    }
+
+    private func adfParagraphs(from text: String) -> [[String: Any]] {
+        text
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .map { paragraph(text: String($0)) }
+    }
+
+    private func paragraph(text: String) -> [String: Any] {
+        if text.isEmpty {
+            return [
+                "type": "paragraph",
+                "content": []
+            ]
+        }
+
+        return [
+            "type": "paragraph",
+            "content": [[
+                "type": "text",
+                "text": text
+            ]]
+        ]
+    }
+
+    private func linkParagraph(text: String, url: String) -> [String: Any] {
+        [
+            "type": "paragraph",
+            "content": [[
+                "type": "text",
+                "text": text,
+                "marks": [[
+                    "type": "link",
+                    "attrs": ["href": url]
+                ]]
+            ]]
+        ]
+    }
+
+    private func adfMediaNode(for attachment: JiraAttachmentMetadata) -> [String: Any]? {
+        guard let url = attachment.content else { return nil }
+
+        return [
+            "type": "mediaSingle",
+            "attrs": [
+                "layout": "center"
+            ],
+            "content": [[
+                "type": "media",
+                "attrs": [
+                    "type": "external",
+                    "url": url,
+                    "alt": attachment.filename
+                ]
+            ]]
         ]
     }
 }
