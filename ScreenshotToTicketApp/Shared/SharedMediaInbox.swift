@@ -19,6 +19,29 @@ enum SharedMediaInbox {
         }
     }
 
+    struct PendingImport {
+        let fileURLs: [URL]
+
+        private let batchDirectories: [URL]
+        private let stagingRoot: URL
+
+        fileprivate init(fileURLs: [URL], batchDirectories: [URL], stagingRoot: URL) {
+            self.fileURLs = fileURLs
+            self.batchDirectories = batchDirectories
+            self.stagingRoot = stagingRoot
+        }
+
+        func finish(success: Bool) {
+            if success {
+                for batchDirectory in batchDirectories {
+                    try? FileManager.default.removeItem(at: batchDirectory)
+                }
+            }
+
+            try? FileManager.default.removeItem(at: stagingRoot)
+        }
+    }
+
     static func importTriggerURL() -> URL {
         URL(string: "\(importURLScheme)://\(importURLHost)")!
     }
@@ -67,9 +90,9 @@ enum SharedMediaInbox {
         return destinationURL
     }
 
-    static func takePendingFiles() throws -> [URL] {
+    static func takePendingFiles() throws -> PendingImport? {
         let batchDirectories = try pendingBatchDirectories()
-        guard !batchDirectories.isEmpty else { return [] }
+        guard !batchDirectories.isEmpty else { return nil }
 
         let stagingRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent("SharedMediaImport-\(UUID().uuidString)", isDirectory: true)
@@ -83,13 +106,16 @@ enum SharedMediaInbox {
                     in: stagingRoot,
                     fileName: fileURL.lastPathComponent
                 )
-                try FileManager.default.moveItem(at: fileURL, to: destinationURL)
+                try FileManager.default.copyItem(at: fileURL, to: destinationURL)
                 stagedFiles.append(destinationURL)
             }
-            try? FileManager.default.removeItem(at: batchDirectory)
         }
 
-        return stagedFiles
+        return PendingImport(
+            fileURLs: stagedFiles,
+            batchDirectories: batchDirectories,
+            stagingRoot: stagingRoot
+        )
     }
 
     static func setPendingImportNotice(_ notice: String?) {

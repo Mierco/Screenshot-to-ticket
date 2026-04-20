@@ -47,8 +47,10 @@ targets:
         CFBundleDisplayName: Import to ScreenshotToTicket
         NSExtension:
           NSExtensionAttributes:
-            NSExtensionActivationSupportsImageWithMaxCount: 100
-            NSExtensionActivationSupportsMovieWithMaxCount: 100
+            NSExtensionActivationRule:
+              NSExtensionActivationDictionaryVersion: 2
+              NSExtensionActivationSupportsImageWithMaxCount: 100
+              NSExtensionActivationSupportsMovieWithMaxCount: 100
           NSExtensionPointIdentifier: com.apple.share-services
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShareViewController
     settings:

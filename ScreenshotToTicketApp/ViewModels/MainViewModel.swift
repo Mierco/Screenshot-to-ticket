@@ -127,8 +127,11 @@ final class MainViewModel: ObservableObject {
     }
 
     func importSharedMediaIfAvailable() async {
+        var pendingImport: SharedMediaInbox.PendingImport?
+
         do {
-            let sharedFileURLs = try SharedMediaInbox.takePendingFiles()
+            pendingImport = try SharedMediaInbox.takePendingFiles()
+            let sharedFileURLs = pendingImport?.fileURLs ?? []
             let sharedNotice = SharedMediaInbox.consumePendingImportNotice()
             guard !sharedFileURLs.isEmpty || sharedNotice != nil else { return }
 
@@ -147,7 +150,9 @@ final class MainViewModel: ObservableObject {
             applyLoadedMedia(batch.media)
             issueURL = nil
             status = combinedNotice(sharedNotice, batch.warning) ?? ""
+            pendingImport?.finish(success: true)
         } catch {
+            pendingImport?.finish(success: false)
             status = "Failed to import shared media: \(error.localizedDescription)"
         }
     }
