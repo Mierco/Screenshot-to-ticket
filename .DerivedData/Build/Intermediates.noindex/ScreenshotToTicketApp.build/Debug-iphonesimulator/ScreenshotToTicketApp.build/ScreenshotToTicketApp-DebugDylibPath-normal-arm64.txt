@@ -1,1 +1,0 @@
-ScreenshotToTicketApp.debug.dylib
