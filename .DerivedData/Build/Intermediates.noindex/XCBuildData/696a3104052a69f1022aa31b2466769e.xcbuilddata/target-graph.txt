@@ -1,2 +1,0 @@
-Target dependency graph (1 target)
-Target 'ScreenshotToTicketApp' in project 'ScreenshotToTicketApp' (no dependencies)
