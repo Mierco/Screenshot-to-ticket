@@ -131,12 +131,12 @@ final class ShareViewController: UIViewController {
             contentType: contentType
         )
 
-        if let fileURL = try await loadFileRepresentation(from: itemProvider, contentType: contentType) {
-            try SharedMediaInbox.storeImportedFile(
-                from: fileURL,
-                in: batchDirectory,
-                preferredFileName: preferredFileName
-            )
+        if await storeFileRepresentation(
+            from: itemProvider,
+            contentType: contentType,
+            in: batchDirectory,
+            preferredFileName: preferredFileName
+        ) {
             return true
         }
 
@@ -161,21 +161,33 @@ final class ShareViewController: UIViewController {
         }
     }
 
-    private func loadFileRepresentation(
+    private func storeFileRepresentation(
         from itemProvider: NSItemProvider,
-        contentType: UTType
-    ) async throws -> URL? {
+        contentType: UTType,
+        in batchDirectory: URL,
+        preferredFileName: String
+    ) async -> Bool {
         guard itemProvider.hasItemConformingToTypeIdentifier(contentType.identifier) else {
-            return nil
+            return false
         }
 
-        return try await withCheckedThrowingContinuation { continuation in
+        return await withCheckedContinuation { continuation in
             itemProvider.loadFileRepresentation(forTypeIdentifier: contentType.identifier) { url, error in
-                if let error {
-                    continuation.resume(throwing: error)
+                guard error == nil, let url else {
+                    continuation.resume(returning: false)
                     return
                 }
-                continuation.resume(returning: url)
+
+                do {
+                    try SharedMediaInbox.storeImportedFile(
+                        from: url,
+                        in: batchDirectory,
+                        preferredFileName: preferredFileName
+                    )
+                    continuation.resume(returning: true)
+                } catch {
+                    continuation.resume(returning: false)
+                }
             }
         }
     }
