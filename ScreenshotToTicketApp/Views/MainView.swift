@@ -32,45 +32,11 @@ struct MainView: View {
                         Toggle("Enable markups on screenshots", isOn: $vm.enableMarkup)
 
                         if vm.enableMarkup {
-                            HStack(spacing: 12) {
-                                Button {
-                                    vm.isMarkupDrawingMode.toggle()
-                                } label: {
-                                    Label("Draw", systemImage: "pencil")
-                                }
-                                .buttonStyle(.borderedProminent)
-                                .tint(vm.isMarkupDrawingMode ? .accentColor : .secondary)
-
-                                ScrollView(.horizontal, showsIndicators: false) {
-                                    HStack(spacing: 10) {
-                                        ForEach(MainViewModel.AnnotationColor.allCases) { color in
-                                            Button {
-                                                vm.selectedColor = color
-                                            } label: {
-                                                ZStack {
-                                                    Circle()
-                                                        .fill(color.swatch)
-                                                        .frame(width: 26, height: 26)
-                                                    if vm.selectedColor == color {
-                                                        Circle()
-                                                            .stroke(.primary, lineWidth: 2)
-                                                            .frame(width: 34, height: 34)
-                                                    }
-                                                }
-                                                .frame(width: 36, height: 36)
-                                            }
-                                            .buttonStyle(.plain)
-                                            .padding(.vertical, 2)
-                                            .accessibilityLabel(color.rawValue)
-                                        }
-                                    }
-                                    .padding(.vertical, 4)
-                                }
-                            }
-
                             Text("Draw colored circles around specific areas that you want to report")
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
+
+                            markupColorPalette
 
                             ForEach(vm.mediaItems) { media in
                                 VStack(alignment: .leading, spacing: 8) {
@@ -92,6 +58,7 @@ struct MainView: View {
                                             Button("Undo") { vm.undoMark(mediaID: media.id) }
                                             Button("Clear") { vm.clearMarks(mediaID: media.id) }
                                         }
+                                        .buttonStyle(.borderless)
                                         .font(.footnote)
                                     } else {
                                         Text("Markup is available for images only.")
@@ -164,6 +131,13 @@ struct MainView: View {
                     Button("Settings") { showingSettings = true }
                 }
             }
+            .overlay(alignment: .bottomTrailing) {
+                if shouldShowFloatingDrawButton {
+                    floatingDrawButton
+                        .padding(.trailing, 18)
+                        .padding(.bottom, 18)
+                }
+            }
             .sheet(isPresented: $showingSettings) {
                 SettingsView()
                     .environmentObject(settings)
@@ -177,6 +151,52 @@ struct MainView: View {
                 vm.isMarkupDrawingMode = false
             }
         }
+    }
+
+    private var shouldShowFloatingDrawButton: Bool {
+        vm.enableMarkup && vm.mediaItems.contains { $0.isImage }
+    }
+
+    private var markupColorPalette: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 10) {
+                ForEach(MainViewModel.AnnotationColor.allCases) { color in
+                    Button {
+                        vm.selectedColor = color
+                    } label: {
+                        ZStack {
+                            Circle()
+                                .fill(color.swatch)
+                                .frame(width: 26, height: 26)
+                            if vm.selectedColor == color {
+                                Circle()
+                                    .stroke(.primary, lineWidth: 2)
+                                    .frame(width: 34, height: 34)
+                            }
+                        }
+                        .frame(width: 36, height: 36)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.vertical, 2)
+                    .accessibilityLabel(color.rawValue)
+                }
+            }
+            .padding(.vertical, 4)
+        }
+    }
+
+    private var floatingDrawButton: some View {
+        Button {
+            vm.isMarkupDrawingMode.toggle()
+        } label: {
+            Label("Draw", systemImage: "pencil")
+                .font(.headline)
+        }
+        .buttonStyle(.borderedProminent)
+        .controlSize(.large)
+        .tint(vm.isMarkupDrawingMode ? .accentColor : .secondary)
+        .shadow(color: .black.opacity(0.18), radius: 10, x: 0, y: 4)
+        .accessibilityHint(vm.isMarkupDrawingMode ? "Drawing mode is active" : "Turns on drawing mode")
     }
 }
 
@@ -279,7 +299,15 @@ private struct UIKitAnnotationCanvasView: UIViewRepresentable {
 
         let drawingView = AnnotationDrawingUIView(frame: CGRect(origin: .zero, size: canvasSize))
         drawingView.backgroundColor = .secondarySystemBackground
+
+        let drawPan = UIPanGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleDrawPan(_:)))
+        drawPan.minimumNumberOfTouches = 1
+        drawPan.maximumNumberOfTouches = 1
+        drawPan.cancelsTouchesInView = true
+        drawingView.addGestureRecognizer(drawPan)
+
         context.coordinator.drawingView = drawingView
+        context.coordinator.drawPanGesture = drawPan
         scrollView.addSubview(drawingView)
         scrollView.contentSize = canvasSize
 
@@ -297,6 +325,8 @@ private struct UIKitAnnotationCanvasView: UIViewRepresentable {
         drawingView.opacity = opacity
         drawingView.onFreehandPoint = onFreehandPoint
         drawingView.setNeedsDisplay()
+        context.coordinator.isDrawingEnabled = interactive
+        context.coordinator.drawPanGesture?.isEnabled = interactive
 
         scrollView.minimumZoomScale = 1
         scrollView.maximumZoomScale = 4
@@ -310,6 +340,9 @@ private struct UIKitAnnotationCanvasView: UIViewRepresentable {
 
     final class Coordinator: NSObject, UIScrollViewDelegate {
         weak var drawingView: AnnotationDrawingUIView?
+        weak var drawPanGesture: UIPanGestureRecognizer?
+        var isDrawingEnabled = false
+        private var isDrawingStrokeActive = false
 
         func viewForZooming(in scrollView: UIScrollView) -> UIView? {
             drawingView
@@ -335,6 +368,43 @@ private struct UIKitAnnotationCanvasView: UIViewRepresentable {
             let tapPoint = recognizer.location(in: drawingView)
             let zoomRect = zoomRect(centeredAt: tapPoint, scale: targetScale, in: scrollView, contentBounds: drawingView.bounds)
             scrollView.zoom(to: zoomRect, animated: true)
+        }
+
+        @objc func handleDrawPan(_ recognizer: UIPanGestureRecognizer) {
+            guard isDrawingEnabled, let drawingView = drawingView else {
+                isDrawingStrokeActive = false
+                return
+            }
+
+            let point = recognizer.location(in: drawingView)
+            guard let normalized = drawingView.normalizedPoint(point) else {
+                if recognizer.state == .ended || recognizer.state == .cancelled || recognizer.state == .failed {
+                    isDrawingStrokeActive = false
+                }
+                return
+            }
+
+            switch recognizer.state {
+            case .began:
+                drawingView.onFreehandPoint?(normalized, true)
+                isDrawingStrokeActive = true
+            case .changed:
+                if !isDrawingStrokeActive {
+                    drawingView.onFreehandPoint?(normalized, true)
+                    isDrawingStrokeActive = true
+                } else {
+                    drawingView.onFreehandPoint?(normalized, false)
+                }
+            case .ended:
+                if isDrawingStrokeActive {
+                    drawingView.onFreehandPoint?(normalized, false)
+                }
+                isDrawingStrokeActive = false
+            case .cancelled, .failed:
+                isDrawingStrokeActive = false
+            default:
+                break
+            }
         }
 
         func centerContent(in scrollView: UIScrollView) {
@@ -374,9 +444,6 @@ private final class AnnotationDrawingUIView: UIView {
     var interactive = false
     var opacity = 0.75
     var onFreehandPoint: ((CGPoint, Bool) -> Void)?
-
-    private var drawingStroke = false
-    private var pendingStartPoint: CGPoint?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -421,48 +488,7 @@ private final class AnnotationDrawingUIView: UIView {
         }
     }
 
-    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
-        guard interactive, event?.allTouches?.count == 1, let touch = touches.first else {
-            drawingStroke = false
-            pendingStartPoint = nil
-            return
-        }
-        drawingStroke = addPoint(from: touch, beginStroke: true)
-    }
-
-    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
-        guard interactive, drawingStroke, event?.allTouches?.count == 1, let touch = touches.first else { return }
-        _ = addPoint(from: touch, beginStroke: false)
-    }
-
-    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
-        if interactive, drawingStroke, pendingStartPoint == nil, let touch = touches.first {
-            _ = addPoint(from: touch, beginStroke: false)
-        }
-        drawingStroke = false
-        pendingStartPoint = nil
-    }
-
-    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
-        drawingStroke = false
-        pendingStartPoint = nil
-    }
-
-    private func addPoint(from touch: UITouch, beginStroke: Bool) -> Bool {
-        guard let normalized = normalizedPoint(touch.location(in: self)) else { return false }
-        if beginStroke {
-            pendingStartPoint = normalized
-            return true
-        }
-        if let startPoint = pendingStartPoint {
-            onFreehandPoint?(startPoint, true)
-            pendingStartPoint = nil
-        }
-        onFreehandPoint?(normalized, beginStroke)
-        return true
-    }
-
-    private func normalizedPoint(_ point: CGPoint) -> CGPoint? {
+    func normalizedPoint(_ point: CGPoint) -> CGPoint? {
         let drawRect = aspectFitRect(imageSize: image.size, in: bounds)
         guard drawRect.contains(point), drawRect.width > 0, drawRect.height > 0 else { return nil }
         return CGPoint(
