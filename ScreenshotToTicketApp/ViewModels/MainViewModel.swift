@@ -74,9 +74,9 @@ final class MainViewModel: ObservableObject {
     @Published var isSubmitting = false
     @Published var isLoadingMedia = false
     @Published var enableMarkup = false
+    @Published var isMarkupDrawingMode = false
     @Published var selectedColor: AnnotationColor = .red
-    @Published var markupOpacity = 0.75
-    @Published var markupCanvasScale = 1.0
+    let markupOpacity = 0.75
 
     @Published private(set) var marksByMediaID: [UUID: [AnnotationMark]] = [:]
 

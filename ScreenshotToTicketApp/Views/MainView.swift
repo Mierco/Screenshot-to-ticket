@@ -32,10 +32,14 @@ struct MainView: View {
                         Toggle("Enable markups on screenshots", isOn: $vm.enableMarkup)
 
                         if vm.enableMarkup {
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text("Color")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                            HStack(spacing: 12) {
+                                Button {
+                                    vm.isMarkupDrawingMode.toggle()
+                                } label: {
+                                    Label("Draw", systemImage: "pencil")
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .tint(vm.isMarkupDrawingMode ? .accentColor : .secondary)
 
                                 ScrollView(.horizontal, showsIndicators: false) {
                                     HStack(spacing: 10) {
@@ -64,31 +68,7 @@ struct MainView: View {
                                 }
                             }
 
-                            VStack(alignment: .leading, spacing: 6) {
-                                HStack {
-                                    Text("Opacity")
-                                    Spacer()
-                                    Text("\(Int((vm.markupOpacity * 100).rounded()))%")
-                                        .foregroundStyle(.secondary)
-                                }
-                                .font(.caption)
-
-                                Slider(value: $vm.markupOpacity, in: 0.1...1.0, step: 0.05)
-                            }
-
-                            VStack(alignment: .leading, spacing: 6) {
-                                HStack {
-                                    Text("Canvas size")
-                                    Spacer()
-                                    Text("\(Int((vm.markupCanvasScale * 100).rounded()))%")
-                                        .foregroundStyle(.secondary)
-                                }
-                                .font(.caption)
-
-                                Slider(value: $vm.markupCanvasScale, in: 0.8...1.6, step: 0.05)
-                            }
-
-                            Text("Drag on each screenshot to draw a freehand highlight. Increase canvas size for more detail; wider canvases can be panned horizontally.")
+                            Text("Draw colored circles around specific areas that you want to report")
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
 
@@ -98,12 +78,11 @@ struct MainView: View {
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
 
-                                    ResizableAnnotationCanvasView(
+                                    ZoomableAnnotationCanvasView(
                                         image: media.previewImage,
                                         marks: vm.marksByMediaID[media.id] ?? [],
-                                        interactive: media.isImage,
-                                        opacity: vm.markupOpacity,
-                                        canvasScale: vm.markupCanvasScale
+                                        interactive: media.isImage && vm.isMarkupDrawingMode,
+                                        opacity: vm.markupOpacity
                                     ) { point, isStart in
                                         vm.addFreehandPoint(mediaID: media.id, normalizedPoint: point, beginStroke: isStart)
                                     }
@@ -193,37 +172,34 @@ struct MainView: View {
         .onChange(of: vm.selectedItems) { _ in
             Task { await vm.refreshSelectedMedia() }
         }
+        .onChange(of: vm.enableMarkup) { enabled in
+            if !enabled {
+                vm.isMarkupDrawingMode = false
+            }
+        }
     }
 }
 
-private struct ResizableAnnotationCanvasView: View {
+private struct ZoomableAnnotationCanvasView: View {
     let image: UIImage
     let marks: [MainViewModel.AnnotationMark]
     let interactive: Bool
     let opacity: Double
-    let canvasScale: Double
     let onFreehandPoint: (CGPoint, Bool) -> Void
 
     @State private var availableWidth = max(280, UIScreen.main.bounds.width - 32)
 
     var body: some View {
-        let canvasSize = calculatedCanvasSize(for: image, availableWidth: availableWidth, scale: canvasScale)
+        let canvasSize = calculatedCanvasSize(for: image, availableWidth: availableWidth)
 
-        ScrollView(.horizontal, showsIndicators: canvasSize.width > availableWidth + 1) {
-            HStack(spacing: 0) {
-                Spacer(minLength: 0)
-                AnnotationCanvasView(
-                    image: image,
-                    marks: marks,
-                    interactive: interactive,
-                    opacity: opacity,
-                    onFreehandPoint: onFreehandPoint
-                )
-                .frame(width: canvasSize.width, height: canvasSize.height)
-                Spacer(minLength: 0)
-            }
-            .frame(minWidth: availableWidth)
-        }
+        UIKitAnnotationCanvasView(
+            image: image,
+            marks: marks,
+            interactive: interactive,
+            opacity: opacity,
+            canvasSize: canvasSize,
+            onFreehandPoint: onFreehandPoint
+        )
         .background(WidthObserver(width: $availableWidth))
         .frame(height: canvasSize.height)
         .clipShape(RoundedRectangle(cornerRadius: 10))
@@ -233,7 +209,7 @@ private struct ResizableAnnotationCanvasView: View {
         }
     }
 
-    private func calculatedCanvasSize(for image: UIImage, availableWidth: CGFloat, scale: Double) -> CGSize {
+    private func calculatedCanvasSize(for image: UIImage, availableWidth: CGFloat) -> CGSize {
         let natural = naturalPointSize(for: image)
         guard natural.width > 0, natural.height > 0 else {
             return CGSize(width: max(availableWidth, 280), height: 360)
@@ -243,9 +219,9 @@ private struct ResizableAnnotationCanvasView: View {
         let aspect = natural.width / natural.height
         let maxWidth = baseWidth * 2.4
         let minHeight: CGFloat = 280
-        let maxHeight: CGFloat = 900
+        let maxHeight: CGFloat = 760
 
-        var width = min(baseWidth * CGFloat(scale), maxWidth)
+        var width = min(baseWidth, maxWidth)
         var height = width / aspect
 
         if height < minHeight {
@@ -271,6 +247,251 @@ private struct ResizableAnnotationCanvasView: View {
     }
 }
 
+private struct UIKitAnnotationCanvasView: UIViewRepresentable {
+    let image: UIImage
+    let marks: [MainViewModel.AnnotationMark]
+    let interactive: Bool
+    let opacity: Double
+    let canvasSize: CGSize
+    let onFreehandPoint: (CGPoint, Bool) -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    func makeUIView(context: Context) -> UIScrollView {
+        let scrollView = UIScrollView()
+        scrollView.backgroundColor = .secondarySystemBackground
+        scrollView.delegate = context.coordinator
+        scrollView.delaysContentTouches = false
+        scrollView.canCancelContentTouches = true
+        scrollView.showsHorizontalScrollIndicator = true
+        scrollView.showsVerticalScrollIndicator = true
+        scrollView.minimumZoomScale = 1
+        scrollView.maximumZoomScale = 4
+        scrollView.bouncesZoom = true
+        scrollView.panGestureRecognizer.minimumNumberOfTouches = 2
+
+        let doubleTap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleDoubleTap(_:)))
+        doubleTap.numberOfTapsRequired = 2
+        doubleTap.cancelsTouchesInView = false
+        scrollView.addGestureRecognizer(doubleTap)
+
+        let drawingView = AnnotationDrawingUIView(frame: CGRect(origin: .zero, size: canvasSize))
+        drawingView.backgroundColor = .secondarySystemBackground
+        context.coordinator.drawingView = drawingView
+        scrollView.addSubview(drawingView)
+        scrollView.contentSize = canvasSize
+
+        return scrollView
+    }
+
+    func updateUIView(_ scrollView: UIScrollView, context: Context) {
+        guard let drawingView = context.coordinator.drawingView else { return }
+
+        let sizeChanged = drawingView.bounds.size != canvasSize
+        drawingView.image = image
+        drawingView.marks = marks
+        drawingView.interactive = interactive
+        drawingView.isUserInteractionEnabled = interactive
+        drawingView.opacity = opacity
+        drawingView.onFreehandPoint = onFreehandPoint
+        drawingView.setNeedsDisplay()
+
+        scrollView.minimumZoomScale = 1
+        scrollView.maximumZoomScale = 4
+        if sizeChanged {
+            scrollView.setZoomScale(1, animated: false)
+            drawingView.frame = CGRect(origin: .zero, size: canvasSize)
+            scrollView.contentSize = canvasSize
+        }
+        context.coordinator.centerContent(in: scrollView)
+    }
+
+    final class Coordinator: NSObject, UIScrollViewDelegate {
+        weak var drawingView: AnnotationDrawingUIView?
+
+        func viewForZooming(in scrollView: UIScrollView) -> UIView? {
+            drawingView
+        }
+
+        func scrollViewDidZoom(_ scrollView: UIScrollView) {
+            centerContent(in: scrollView)
+        }
+
+        @objc func handleDoubleTap(_ recognizer: UITapGestureRecognizer) {
+            guard
+                recognizer.state == .ended,
+                let scrollView = recognizer.view as? UIScrollView,
+                let drawingView = drawingView
+            else { return }
+
+            if scrollView.zoomScale > scrollView.minimumZoomScale + 0.01 {
+                scrollView.setZoomScale(scrollView.minimumZoomScale, animated: true)
+                return
+            }
+
+            let targetScale = min(scrollView.maximumZoomScale, max(scrollView.minimumZoomScale * 2.5, 1.5))
+            let tapPoint = recognizer.location(in: drawingView)
+            let zoomRect = zoomRect(centeredAt: tapPoint, scale: targetScale, in: scrollView, contentBounds: drawingView.bounds)
+            scrollView.zoom(to: zoomRect, animated: true)
+        }
+
+        func centerContent(in scrollView: UIScrollView) {
+            guard let drawingView = drawingView else { return }
+
+            let boundsSize = scrollView.bounds.size
+            let contentSize = drawingView.frame.size
+            let horizontalInset = max(0, (boundsSize.width - contentSize.width) / 2)
+            let verticalInset = max(0, (boundsSize.height - contentSize.height) / 2)
+            scrollView.contentInset = UIEdgeInsets(
+                top: verticalInset,
+                left: horizontalInset,
+                bottom: verticalInset,
+                right: horizontalInset
+            )
+        }
+
+        private func zoomRect(centeredAt center: CGPoint, scale: CGFloat, in scrollView: UIScrollView, contentBounds: CGRect) -> CGRect {
+            let size = CGSize(
+                width: scrollView.bounds.width / scale,
+                height: scrollView.bounds.height / scale
+            )
+            let maxX = max(contentBounds.minX, contentBounds.maxX - size.width)
+            let maxY = max(contentBounds.minY, contentBounds.maxY - size.height)
+            let origin = CGPoint(
+                x: min(max(center.x - size.width / 2, contentBounds.minX), maxX),
+                y: min(max(center.y - size.height / 2, contentBounds.minY), maxY)
+            )
+            return CGRect(origin: origin, size: size)
+        }
+    }
+}
+
+private final class AnnotationDrawingUIView: UIView {
+    var image = UIImage()
+    var marks: [MainViewModel.AnnotationMark] = []
+    var interactive = false
+    var opacity = 0.75
+    var onFreehandPoint: ((CGPoint, Bool) -> Void)?
+
+    private var drawingStroke = false
+    private var pendingStartPoint: CGPoint?
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        isMultipleTouchEnabled = true
+        isOpaque = true
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        isMultipleTouchEnabled = true
+        isOpaque = true
+    }
+
+    override func draw(_ rect: CGRect) {
+        UIColor.secondarySystemBackground.setFill()
+        UIRectFill(bounds)
+
+        let drawRect = aspectFitRect(imageSize: image.size, in: bounds)
+        image.draw(in: drawRect)
+
+        guard let context = UIGraphicsGetCurrentContext() else { return }
+        context.setLineJoin(.round)
+        context.setLineCap(.round)
+        context.setLineWidth(max(3, min(drawRect.width, drawRect.height) * 0.008))
+
+        for mark in marks {
+            let points = mark.points.map {
+                CGPoint(
+                    x: drawRect.minX + ($0.x * drawRect.width),
+                    y: drawRect.minY + ($0.y * drawRect.height)
+                )
+            }
+            guard points.count > 1 else { continue }
+
+            context.setStrokeColor(mark.color.uiColor.withAlphaComponent(CGFloat(opacity)).cgColor)
+            context.beginPath()
+            context.move(to: points[0])
+            for point in points.dropFirst() {
+                context.addLine(to: point)
+            }
+            context.strokePath()
+        }
+    }
+
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+        guard interactive, event?.allTouches?.count == 1, let touch = touches.first else {
+            drawingStroke = false
+            pendingStartPoint = nil
+            return
+        }
+        drawingStroke = addPoint(from: touch, beginStroke: true)
+    }
+
+    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
+        guard interactive, drawingStroke, event?.allTouches?.count == 1, let touch = touches.first else { return }
+        _ = addPoint(from: touch, beginStroke: false)
+    }
+
+    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+        if interactive, drawingStroke, pendingStartPoint == nil, let touch = touches.first {
+            _ = addPoint(from: touch, beginStroke: false)
+        }
+        drawingStroke = false
+        pendingStartPoint = nil
+    }
+
+    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
+        drawingStroke = false
+        pendingStartPoint = nil
+    }
+
+    private func addPoint(from touch: UITouch, beginStroke: Bool) -> Bool {
+        guard let normalized = normalizedPoint(touch.location(in: self)) else { return false }
+        if beginStroke {
+            pendingStartPoint = normalized
+            return true
+        }
+        if let startPoint = pendingStartPoint {
+            onFreehandPoint?(startPoint, true)
+            pendingStartPoint = nil
+        }
+        onFreehandPoint?(normalized, beginStroke)
+        return true
+    }
+
+    private func normalizedPoint(_ point: CGPoint) -> CGPoint? {
+        let drawRect = aspectFitRect(imageSize: image.size, in: bounds)
+        guard drawRect.contains(point), drawRect.width > 0, drawRect.height > 0 else { return nil }
+        return CGPoint(
+            x: (point.x - drawRect.minX) / drawRect.width,
+            y: (point.y - drawRect.minY) / drawRect.height
+        )
+    }
+
+    private func aspectFitRect(imageSize: CGSize, in bounds: CGRect) -> CGRect {
+        guard imageSize.width > 0, imageSize.height > 0, bounds.width > 0, bounds.height > 0 else {
+            return bounds
+        }
+
+        let imageAspect = imageSize.width / imageSize.height
+        let boundsAspect = bounds.width / bounds.height
+        if imageAspect > boundsAspect {
+            let width = bounds.width
+            let height = width / imageAspect
+            let y = bounds.minY + (bounds.height - height) / 2
+            return CGRect(x: bounds.minX, y: y, width: width, height: height)
+        } else {
+            let height = bounds.height
+            let width = height * imageAspect
+            let x = bounds.minX + (bounds.width - width) / 2
+            return CGRect(x: x, y: bounds.minY, width: width, height: height)
+        }
+    }
+}
+
 private struct WidthObserver: View {
     @Binding var width: CGFloat
 
@@ -289,121 +510,5 @@ private struct WidthObserver: View {
     private func updateWidth(_ newWidth: CGFloat) {
         guard newWidth > 0, abs(width - newWidth) > 0.5 else { return }
         width = newWidth
-    }
-}
-
-private struct AnnotationCanvasView: View {
-    let image: UIImage
-    let marks: [MainViewModel.AnnotationMark]
-    let interactive: Bool
-    let opacity: Double
-    let onFreehandPoint: (CGPoint, Bool) -> Void
-
-    @State private var startedStroke = false
-
-    var body: some View {
-        GeometryReader { geo in
-            let size = geo.size
-            let drawRect = aspectFitRect(imageSize: image.size, in: CGRect(origin: .zero, size: size))
-
-            ZStack {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Color(.secondarySystemBackground))
-
-                ForEach(marks) { mark in
-                    freehandPath(mark.points, in: drawRect)
-                        .stroke(
-                            mark.color.swatch.opacity(opacity),
-                            style: StrokeStyle(lineWidth: lineWidth(in: drawRect), lineCap: .round, lineJoin: .round)
-                        )
-                }
-            }
-            .contentShape(Rectangle())
-            .modifier(
-                AnnotationInteractionModifier(
-                    interactive: interactive,
-                    drawRect: drawRect,
-                    onFreehandPoint: onFreehandPoint,
-                    startedStroke: $startedStroke
-                )
-            )
-        }
-    }
-
-    private func freehandPath(_ points: [CGPoint], in drawRect: CGRect) -> Path {
-        var path = Path()
-        guard let first = points.first else { return path }
-        path.move(
-            to: CGPoint(
-                x: drawRect.minX + (first.x * drawRect.width),
-                y: drawRect.minY + (first.y * drawRect.height)
-            )
-        )
-        for point in points.dropFirst() {
-            path.addLine(
-                to: CGPoint(
-                    x: drawRect.minX + (point.x * drawRect.width),
-                    y: drawRect.minY + (point.y * drawRect.height)
-                )
-            )
-        }
-        return path
-    }
-
-    private func lineWidth(in drawRect: CGRect) -> CGFloat {
-        max(3, min(drawRect.width, drawRect.height) * 0.008)
-    }
-
-    private func aspectFitRect(imageSize: CGSize, in bounds: CGRect) -> CGRect {
-        guard imageSize.width > 0, imageSize.height > 0, bounds.width > 0, bounds.height > 0 else {
-            return bounds
-        }
-        let imageAspect = imageSize.width / imageSize.height
-        let boundsAspect = bounds.width / bounds.height
-        if imageAspect > boundsAspect {
-            let width = bounds.width
-            let height = width / imageAspect
-            let y = bounds.minY + (bounds.height - height) / 2
-            return CGRect(x: bounds.minX, y: y, width: width, height: height)
-        } else {
-            let height = bounds.height
-            let width = height * imageAspect
-            let x = bounds.minX + (bounds.width - width) / 2
-            return CGRect(x: x, y: bounds.minY, width: width, height: height)
-        }
-    }
-}
-
-private struct AnnotationInteractionModifier: ViewModifier {
-    let interactive: Bool
-    let drawRect: CGRect
-    let onFreehandPoint: (CGPoint, Bool) -> Void
-    @Binding var startedStroke: Bool
-
-    func body(content: Content) -> some View {
-        content
-            .gesture(
-                DragGesture(minimumDistance: 0)
-                    .onChanged { value in
-                        guard interactive else { return }
-                        guard let normalized = normalize(value.location) else { return }
-                        onFreehandPoint(normalized, !startedStroke)
-                        startedStroke = true
-                    }
-                    .onEnded { _ in
-                        startedStroke = false
-                    }
-            )
-    }
-
-    private func normalize(_ point: CGPoint) -> CGPoint? {
-        guard drawRect.contains(point), drawRect.width > 0, drawRect.height > 0 else { return nil }
-        return CGPoint(
-            x: (point.x - drawRect.minX) / drawRect.width,
-            y: (point.y - drawRect.minY) / drawRect.height
-        )
     }
 }
