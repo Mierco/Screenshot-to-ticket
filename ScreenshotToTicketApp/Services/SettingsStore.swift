@@ -116,41 +116,105 @@ final class SettingsStore: ObservableObject {
         jiraProfiles.first { $0.id == activeJiraProfileID } ?? jiraProfiles.first
     }
 
+    func activateProfile(id: String) {
+        guard jiraProfiles.contains(where: { $0.id == id }) else { return }
+        activeJiraProfileID = id
+        persistActiveProfileSelection()
+    }
+
     func updateActiveJiraProfile(_ update: (inout JiraProfile) -> Void) {
         guard let index = jiraProfiles.firstIndex(where: { $0.id == activeJiraProfileID }) else { return }
         update(&jiraProfiles[index])
     }
 
-    func activateOrCreateProfile(from project: JiraProject) {
-        let projectKey = project.key.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-        guard !projectKey.isEmpty else { return }
+    @discardableResult
+    func createProfile(name: String, projectKey: String, defaultFieldsJSON: String = "{}") throws -> JiraProfile {
+        let projectKey = projectKey.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard !projectKey.isEmpty else {
+            throw NSError(
+                domain: "SettingsStore",
+                code: 7,
+                userInfo: [NSLocalizedDescriptionKey: "Jira profile needs a project key."]
+            )
+        }
 
         if let index = jiraProfiles.firstIndex(where: { $0.projectKey.uppercased() == projectKey }) {
             activeJiraProfileID = jiraProfiles[index].id
-            return
+            persistActiveProfileSelection()
+            return jiraProfiles[index]
         }
 
-        let profileName = project.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let originalProfiles = jiraProfiles
+        let originalActiveProfileID = activeJiraProfileID
+        let profileName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let profile = JiraProfile(
             name: profileName.isEmpty ? projectKey : profileName,
-            projectKey: projectKey
+            projectKey: projectKey,
+            defaultFieldsJSON: defaultFieldsJSON
         )
         jiraProfiles.append(profile)
         activeJiraProfileID = profile.id
+        do {
+            try persistProfiles()
+        } catch {
+            jiraProfiles = originalProfiles
+            activeJiraProfileID = originalActiveProfileID
+            throw error
+        }
+        return activeJiraProfile ?? profile
     }
 
-    func deleteActiveJiraProfile() {
+    @discardableResult
+    func createProfile(from project: JiraProject, name: String? = nil) throws -> JiraProfile {
+        try createProfile(
+            name: name ?? project.name,
+            projectKey: project.key
+        )
+    }
+
+    func updateProfile(_ profile: JiraProfile) throws {
+        guard let index = jiraProfiles.firstIndex(where: { $0.id == profile.id }) else { return }
+        let originalProfiles = jiraProfiles
+        let originalActiveProfileID = activeJiraProfileID
+        jiraProfiles[index] = profile
+        do {
+            try persistProfiles()
+        } catch {
+            jiraProfiles = originalProfiles
+            activeJiraProfileID = originalActiveProfileID
+            throw error
+        }
+    }
+
+    func deleteProfile(id: String) throws {
         guard jiraProfiles.count > 1,
-              let index = jiraProfiles.firstIndex(where: { $0.id == activeJiraProfileID }) else {
+              let index = jiraProfiles.firstIndex(where: { $0.id == id }) else {
             return
         }
 
+        let originalProfiles = jiraProfiles
+        let originalActiveProfileID = activeJiraProfileID
         jiraProfiles.remove(at: index)
         activeJiraProfileID = jiraProfiles[min(index, jiraProfiles.count - 1)].id
+        do {
+            try persistProfiles()
+        } catch {
+            jiraProfiles = originalProfiles
+            activeJiraProfileID = originalActiveProfileID
+            throw error
+        }
+    }
+
+    func deleteActiveJiraProfile() {
+        try? deleteProfile(id: activeJiraProfileID)
     }
 
     func defaultFields(for profile: JiraProfile) throws -> [String: Any] {
         try Self.parseDefaultFieldsJSON(profile.defaultFieldsJSON)
+    }
+
+    func validateDefaultFieldsJSON(_ json: String) throws {
+        _ = try Self.parseDefaultFieldsJSON(json)
     }
 
     var effectiveTicketPrompt: String {
@@ -237,6 +301,21 @@ final class SettingsStore: ObservableObject {
             return activeID
         }
         return profiles.first?.id ?? UUID().uuidString
+    }
+
+    private func persistProfiles() throws {
+        let normalizedProfiles = try Self.validatedProfiles(jiraProfiles)
+        jiraProfiles = normalizedProfiles
+        activeJiraProfileID = Self.validActiveProfileID(activeJiraProfileID, profiles: normalizedProfiles)
+
+        let encodedProfiles = try JSONEncoder().encode(jiraProfiles)
+        defaults.set(encodedProfiles, forKey: DefaultsKey.jiraProfiles)
+        persistActiveProfileSelection()
+    }
+
+    private func persistActiveProfileSelection() {
+        defaults.set(activeJiraProfileID, forKey: DefaultsKey.activeJiraProfileID)
+        defaults.set(activeJiraProfile?.projectKey ?? "", forKey: DefaultsKey.legacyProjectKey)
     }
 
     private static func parseDefaultFieldsJSON(_ json: String) throws -> [String: Any] {

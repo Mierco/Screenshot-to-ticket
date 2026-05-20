@@ -78,7 +78,7 @@ struct MainView: View {
                 }
 
                 Section("Submit") {
-                    Picker("Jira Profile", selection: $settings.activeJiraProfileID) {
+                    Picker("Jira Profile", selection: activeJiraProfileSelection) {
                         ForEach(settings.jiraProfiles) { profile in
                             Text("\(profile.name) (\(profile.projectKey))")
                                 .tag(profile.id)
@@ -164,6 +164,13 @@ struct MainView: View {
 
     private var shouldShowFloatingDrawButton: Bool {
         vm.enableMarkup && vm.mediaItems.contains { $0.isImage }
+    }
+
+    private var activeJiraProfileSelection: Binding<String> {
+        Binding(
+            get: { settings.activeJiraProfileID },
+            set: { settings.activateProfile(id: $0) }
+        )
     }
 
     private var markupColorPalette: some View {

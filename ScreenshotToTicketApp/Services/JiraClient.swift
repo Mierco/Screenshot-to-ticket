@@ -33,6 +33,62 @@ struct JiraClient {
         return decoded.values.sorted { $0.key < $1.key }
     }
 
+    func fetchCreateIssueTypes(projectKey: String) async throws -> [JiraIssueType] {
+        var issueTypes: [JiraIssueType] = []
+        var startAt = 0
+        let maxResults = 50
+
+        while true {
+            let endpoint = apiURL(
+                "/rest/api/3/issue/createmeta/\(pathComponent(projectKey))/issuetypes?startAt=\(startAt)&maxResults=\(maxResults)"
+            )
+            let request = try buildRequest(urlString: endpoint, method: "GET")
+
+            let (data, response) = try await URLSession.shared.data(for: request)
+            try validate(response: response, data: data)
+            let decoded = try JSONDecoder().decode(JiraCreateIssueTypesResponse.self, from: data)
+            issueTypes.append(contentsOf: decoded.issueTypes)
+
+            let pageSize = decoded.maxResults ?? maxResults
+            let total = decoded.total ?? issueTypes.count
+            startAt += max(pageSize, decoded.issueTypes.count)
+
+            if decoded.issueTypes.isEmpty || startAt >= total {
+                break
+            }
+        }
+
+        return issueTypes.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
+    func fetchCreateFields(projectKey: String, issueTypeId: String) async throws -> [JiraCreateFieldMetadata] {
+        var fields: [JiraCreateFieldMetadata] = []
+        var startAt = 0
+        let maxResults = 200
+
+        while true {
+            let endpoint = apiURL(
+                "/rest/api/3/issue/createmeta/\(pathComponent(projectKey))/issuetypes/\(pathComponent(issueTypeId))?startAt=\(startAt)&maxResults=\(maxResults)"
+            )
+            let request = try buildRequest(urlString: endpoint, method: "GET")
+
+            let (data, response) = try await URLSession.shared.data(for: request)
+            try validate(response: response, data: data)
+            let decoded = try JSONDecoder().decode(JiraCreateFieldsResponse.self, from: data)
+            fields.append(contentsOf: decoded.fields)
+
+            let pageSize = decoded.maxResults ?? maxResults
+            let total = decoded.total ?? fields.count
+            startAt += max(pageSize, decoded.fields.count)
+
+            if decoded.fields.isEmpty || startAt >= total {
+                break
+            }
+        }
+
+        return fields.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
     func fetchBiggestUnreleasedVersion() async throws -> JiraVersion? {
         let endpoint = apiURL("/rest/api/3/project/\(projectKey)/versions")
         let request = try buildRequest(urlString: endpoint, method: "GET")
@@ -143,6 +199,12 @@ struct JiraClient {
     private func apiURL(_ path: String) -> String {
         let base = workspaceURL.hasSuffix("/") ? String(workspaceURL.dropLast()) : workspaceURL
         return "\(base)\(path)"
+    }
+
+    private func pathComponent(_ value: String) -> String {
+        var allowed = CharacterSet.urlPathAllowed
+        allowed.remove(charactersIn: "/")
+        return value.addingPercentEncoding(withAllowedCharacters: allowed) ?? value
     }
 
     private func validate(response: URLResponse, data: Data) throws {

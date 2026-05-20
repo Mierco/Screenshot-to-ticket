@@ -43,10 +43,11 @@ Open the app, tap `Settings`, then fill:
 
 Credentials are stored in Keychain. Workspace URL, Jira profiles, active profile, and model are stored in `UserDefaults`.
 
-Jira profiles are managed in Settings:
-- load available Jira projects
-- use a selected project as a profile
-- rename the profile
+Settings only selects the active Jira profile. To create or edit profiles:
+- open `Add Profile` to launch the full-screen profile creation flow
+- search and select an available Jira project
+- confirm or rename the new profile
+- edit existing profiles from `Edit Selected Profile`
 - add default Jira fields as a JSON `fields` object
 
 Default field JSON is merged into the Jira issue fields. The app always sets `project`, `summary`, `description`, and automatic `fixVersions`; `issuetype` may be set per profile and falls back to `Bug`.
