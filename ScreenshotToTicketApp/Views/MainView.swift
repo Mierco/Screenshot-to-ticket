@@ -78,6 +78,15 @@ struct MainView: View {
                 }
 
                 Section("Submit") {
+                    Picker("Jira Profile", selection: $settings.activeJiraProfileID) {
+                        ForEach(settings.jiraProfiles) { profile in
+                            Text("\(profile.name) (\(profile.projectKey))")
+                                .tag(profile.id)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .disabled(settings.jiraProfiles.isEmpty)
+
                     Button {
                         Task { await vm.submit(settings: settings) }
                     } label: {

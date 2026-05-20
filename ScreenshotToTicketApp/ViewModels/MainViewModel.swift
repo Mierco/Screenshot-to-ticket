@@ -135,7 +135,7 @@ final class MainViewModel: ObservableObject {
     func submit(settings: SettingsStore) async {
         issueURL = nil
         guard settings.isConfigured else {
-            status = "Fill Jira/OpenAI credentials in Settings."
+            status = "Fill Jira/OpenAI credentials and select a Jira profile in Settings."
             return
         }
 
@@ -143,6 +143,12 @@ final class MainViewModel: ObservableObject {
         defer { isSubmitting = false }
 
         do {
+            guard let jiraProfile = settings.activeJiraProfile else {
+                status = "Select a Jira profile in Settings."
+                return
+            }
+            let defaultFields = try settings.defaultFields(for: jiraProfile)
+
             status = "Loading media..."
             if mediaItems.isEmpty, !selectedItems.isEmpty {
                 await refreshSelectedMedia()
@@ -170,7 +176,7 @@ final class MainViewModel: ObservableObject {
                 workspaceURL: settings.workspaceURL,
                 email: settings.jiraEmail,
                 apiToken: settings.jiraApiToken,
-                projectKey: settings.projectKey
+                projectKey: jiraProfile.projectKey
             )
 
             status = "Resolving fix version..."
@@ -180,7 +186,8 @@ final class MainViewModel: ObservableObject {
             let issue = try await jira.createIssue(
                 summary: draft.summary,
                 description: jira.adfDescription(from: descriptionText),
-                fixVersionId: fixVersion?.id
+                fixVersionId: fixVersion?.id,
+                defaultFields: defaultFields
             )
 
             status = "Uploading media..."

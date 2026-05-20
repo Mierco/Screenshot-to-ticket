@@ -52,14 +52,24 @@ struct JiraClient {
             .0
     }
 
-    func createIssue(summary: String, description: [String: Any], fixVersionId: String?) async throws -> JiraIssueResponse {
+    func createIssue(
+        summary: String,
+        description: [String: Any],
+        fixVersionId: String?,
+        defaultFields: [String: Any] = [:]
+    ) async throws -> JiraIssueResponse {
         let endpoint = apiURL("/rest/api/3/issue")
-        var fields: [String: Any] = [
+        var fields = defaultFields
+
+        if fields["issuetype"] == nil {
+            fields["issuetype"] = ["name": "Bug"]
+        }
+
+        fields.merge([
             "project": ["key": projectKey],
-            "issuetype": ["name": "Bug"],
             "summary": summary,
             "description": description
-        ]
+        ]) { _, appValue in appValue }
 
         if let id = fixVersionId {
             fields["fixVersions"] = [["id": id]]

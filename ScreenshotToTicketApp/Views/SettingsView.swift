@@ -10,16 +10,13 @@ struct SettingsView: View {
     @State private var projectMessage = ""
     @State private var authMessage = ""
     @State private var projects: [JiraProject] = []
+    @State private var selectedProjectKey = ""
 
     var body: some View {
         NavigationStack {
             Form {
                 Section("Jira") {
                     TextField("Workspace URL", text: $settings.workspaceURL)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-
-                    TextField("Project Key", text: $settings.projectKey)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
 
@@ -41,17 +38,19 @@ struct SettingsView: View {
                     .disabled(isTestingAuth || settings.workspaceURL.isEmpty || settings.jiraEmail.isEmpty || settings.jiraApiToken.isEmpty)
 
                     if !authMessage.isEmpty {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text(authMessage)
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                                .textSelection(.enabled)
-                            Button("Copy Message") {
-                                UIPasteboard.general.string = authMessage
-                            }
-                            .font(.caption)
+                        messageView(authMessage)
+                    }
+
+                }
+
+                Section("Jira Profiles") {
+                    Picker("Active Profile", selection: $settings.activeJiraProfileID) {
+                        ForEach(settings.jiraProfiles) { profile in
+                            Text("\(profile.name) (\(profile.projectKey))")
+                                .tag(profile.id)
                         }
                     }
+                    .pickerStyle(.menu)
 
                     Button {
                         Task { await loadProjects() }
@@ -59,32 +58,60 @@ struct SettingsView: View {
                         if isLoadingProjects {
                             ProgressView()
                         } else {
-                            Text("Load Available Projects")
+                            Label(projects.isEmpty ? "Add Profile from Jira Project" : "Refresh Jira Projects", systemImage: "plus.circle")
                         }
                     }
                     .disabled(isLoadingProjects || settings.workspaceURL.isEmpty || settings.jiraEmail.isEmpty || settings.jiraApiToken.isEmpty)
 
                     if !projects.isEmpty {
-                        Picker("Available Projects", selection: $settings.projectKey) {
+                        Picker("Project to Add", selection: $selectedProjectKey) {
                             ForEach(projects) { project in
                                 Text("\(project.key) - \(project.name)")
                                     .tag(project.key)
                             }
                         }
                         .pickerStyle(.menu)
+
+                        Button {
+                            activateSelectedProject()
+                        } label: {
+                            Label(selectedProjectAlreadyHasProfile ? "Activate Existing Profile" : "Create Profile from Selected Project", systemImage: selectedProjectAlreadyHasProfile ? "checkmark.circle" : "plus.circle")
+                        }
+                        .disabled(selectedProjectKey.isEmpty)
                     }
 
                     if !projectMessage.isEmpty {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text(projectMessage)
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                                .textSelection(.enabled)
-                            Button("Copy Message") {
-                                UIPasteboard.general.string = projectMessage
-                            }
-                            .font(.caption)
+                        messageView(projectMessage)
+                    }
+
+                    if let profile = settings.activeJiraProfile {
+                        Divider()
+
+                        TextField("Profile Name", text: activeProfileBinding(\.name))
+                            .textInputAutocapitalization(.words)
+                            .autocorrectionDisabled()
+
+                        LabeledContent("Project Key", value: profile.projectKey)
+
+                        TextEditor(text: activeProfileBinding(\.defaultFieldsJSON))
+                            .font(.system(.footnote, design: .monospaced))
+                            .frame(minHeight: 160)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+
+                        Text("Default fields must be a Jira fields JSON object. The app sets project, summary, description, and fixVersions.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+
+                        Button("Delete Active Profile", role: .destructive) {
+                            settings.deleteActiveJiraProfile()
+                            saveMessage = ""
                         }
+                        .disabled(settings.jiraProfiles.count <= 1)
+                    } else {
+                        Text("No Jira profiles configured.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
                     }
                 }
 
@@ -137,16 +164,7 @@ struct SettingsView: View {
                     }
 
                     if !saveMessage.isEmpty {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text(saveMessage)
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                                .textSelection(.enabled)
-                            Button("Copy Message") {
-                                UIPasteboard.general.string = saveMessage
-                            }
-                            .font(.caption)
-                        }
+                        messageView(saveMessage)
                     }
                 }
             }
@@ -156,6 +174,38 @@ struct SettingsView: View {
                     Button("Close") { dismiss() }
                 }
             }
+        }
+    }
+
+    private func messageView(_ message: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(message)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+            Button("Copy Message") {
+                UIPasteboard.general.string = message
+            }
+            .font(.caption)
+        }
+    }
+
+    private func activeProfileBinding(_ keyPath: WritableKeyPath<JiraProfile, String>) -> Binding<String> {
+        Binding(
+            get: {
+                settings.activeJiraProfile?[keyPath: keyPath] ?? ""
+            },
+            set: { value in
+                settings.updateActiveJiraProfile { profile in
+                    profile[keyPath: keyPath] = value
+                }
+            }
+        )
+    }
+
+    private var selectedProjectAlreadyHasProfile: Bool {
+        settings.jiraProfiles.contains {
+            $0.projectKey.uppercased() == selectedProjectKey.uppercased()
         }
     }
 
@@ -169,23 +219,38 @@ struct SettingsView: View {
                 workspaceURL: settings.workspaceURL,
                 email: settings.jiraEmail,
                 apiToken: settings.jiraApiToken,
-                projectKey: settings.projectKey
+                projectKey: settings.activeJiraProfile?.projectKey ?? "TMNEWS"
             )
             let fetched = try await jira.fetchAccessibleProjects()
             projects = fetched
 
-            if let current = fetched.first(where: { $0.key == settings.projectKey }) {
-                settings.projectKey = current.key
-            } else if let first = fetched.first {
-                settings.projectKey = first.key
+            let activeProjectKey = settings.activeJiraProfile?.projectKey.uppercased()
+            if let activeProjectKey,
+               let current = fetched.first(where: { $0.key.uppercased() == activeProjectKey }) {
+                selectedProjectKey = current.key
+            } else {
+                selectedProjectKey = fetched.first?.key ?? ""
             }
 
             projectMessage = fetched.isEmpty
                 ? "No accessible projects found for this account."
-                : "Loaded \(fetched.count) projects."
+                : "Loaded \(fetched.count) projects. Choose one below to create or activate a profile."
         } catch {
             projectMessage = "Failed to load projects: \(error.localizedDescription)"
         }
+    }
+
+    private func activateSelectedProject() {
+        guard let project = projects.first(where: { $0.key == selectedProjectKey }) else { return }
+        let alreadyExists = settings.jiraProfiles.contains {
+            $0.projectKey.uppercased() == project.key.uppercased()
+        }
+
+        settings.activateOrCreateProfile(from: project)
+        projectMessage = alreadyExists
+            ? "Activated profile for \(project.key)."
+            : "Added profile for \(project.key). Tap Save to persist it."
+        saveMessage = ""
     }
 
     private func testJiraAccess() async {
@@ -194,23 +259,26 @@ struct SettingsView: View {
         defer { isTestingAuth = false }
 
         do {
+            let activeProjectKey = settings.activeJiraProfile?.projectKey
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .uppercased() ?? ""
             let jira = JiraClient(
                 workspaceURL: settings.workspaceURL,
                 email: settings.jiraEmail,
                 apiToken: settings.jiraApiToken,
-                projectKey: settings.projectKey
+                projectKey: activeProjectKey.isEmpty ? "TMNEWS" : activeProjectKey
             )
 
             let me = try await jira.fetchCurrentUser()
             let display = me.emailAddress ?? me.displayName
 
-            if settings.projectKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                authMessage = "Auth OK as \(display). Enter a project key to test project access."
+            if activeProjectKey.isEmpty {
+                authMessage = "Auth OK as \(display). Select a Jira profile to test project access."
                 return
             }
 
-            try await jira.validateProjectAccess(projectKey: settings.projectKey.uppercased())
-            authMessage = "Auth OK as \(display). Project \(settings.projectKey.uppercased()) is accessible."
+            try await jira.validateProjectAccess(projectKey: activeProjectKey)
+            authMessage = "Auth OK as \(display). Project \(activeProjectKey) is accessible."
         } catch {
             authMessage = "Access test failed: \(error.localizedDescription)"
         }

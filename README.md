@@ -1,6 +1,6 @@
 # Screenshot-to-ticket
 
-Easy way to create Jira tickets for the TMNEWS project.
+Easy way to create Jira tickets from screenshots and videos.
 
 ## iOS MVP
 
@@ -8,7 +8,7 @@ SwiftUI app that:
 - picks up to 3 images or videos from Photos
 - uses OpenAI to draft bug summary and description
 - applies an optional user hint as instruction and appended reporter notes
-- creates a Jira issue in `TMNEWS`
+- creates a Jira issue in the selected Jira profile/project
 - auto-selects the biggest unreleased semantic fix version
 - uploads selected images and videos as attachments
 
@@ -36,17 +36,24 @@ Suggested value: `Needed to pick screenshots to attach to Jira issues.`
 
 Open the app, tap `Settings`, then fill:
 - Jira Workspace URL (default: `https://iagentur.jira.com`)
-- Project Key (default: `TMNEWS`)
 - Atlassian Email
 - Jira API Token
 - OpenAI API Key
 - OpenAI Model ID (fully configurable; default: `gpt-5.4-codex`)
 
-Credentials are stored in Keychain. Workspace URL, project key, and model are stored in `UserDefaults`.
+Credentials are stored in Keychain. Workspace URL, Jira profiles, active profile, and model are stored in `UserDefaults`.
+
+Jira profiles are managed in Settings:
+- load available Jira projects
+- use a selected project as a profile
+- rename the profile
+- add default Jira fields as a JSON `fields` object
+
+Default field JSON is merged into the Jira issue fields. The app always sets `project`, `summary`, `description`, and automatic `fixVersions`; `issuetype` may be set per profile and falls back to `Bug`.
 
 ## Notes
 
-- Issue type is fixed to `Bug`.
+- Issue type defaults to `Bug` unless a Jira profile sets `issuetype`.
 - Priority is left to the Jira default.
 - Fix version logic picks the largest unreleased semantic version from project versions.
 - Images are resized and compressed to JPEG before upload.

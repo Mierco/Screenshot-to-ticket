@@ -17,6 +17,25 @@ struct JiraProjectSearchResponse: Decodable {
     let values: [JiraProject]
 }
 
+struct JiraProfile: Codable, Identifiable, Equatable {
+    var id: String
+    var name: String
+    var projectKey: String
+    var defaultFieldsJSON: String
+
+    init(
+        id: String = UUID().uuidString,
+        name: String,
+        projectKey: String,
+        defaultFieldsJSON: String = "{}"
+    ) {
+        self.id = id
+        self.name = name
+        self.projectKey = projectKey
+        self.defaultFieldsJSON = defaultFieldsJSON
+    }
+}
+
 struct JiraMyself: Decodable {
     let accountId: String
     let displayName: String
