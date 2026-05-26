@@ -1178,9 +1178,6 @@ private struct JiraDefaultFieldsEditor: View {
                         .font(.caption)
                         .foregroundStyle(.red)
                 }
-
-                Image(systemName: isDefaultFieldSet(field) ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(isDefaultFieldSet(field) ? Color.accentColor : Color.secondary)
             }
 
             HStack {
