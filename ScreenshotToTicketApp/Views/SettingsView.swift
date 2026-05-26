@@ -1045,43 +1045,81 @@ private struct JiraDefaultFieldsEditor: View {
     private var visibleFieldMetadata: [JiraCreateFieldMetadata] {
         fieldTemplateFields.filter {
             !appManagedDefaultFieldKeys.contains($0.fieldId.lowercased())
+                && !guidedDefaultFieldKeys.contains($0.fieldId.lowercased())
         }
     }
 
     private func fieldMetadataRow(_ field: JiraCreateFieldMetadata) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .firstTextBaseline) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(field.name)
-                        .font(.footnote)
-                        .fontWeight(.semibold)
-                    Text(field.fieldId)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .textSelection(.enabled)
+        Button {
+            toggleDefaultField(field)
+        } label: {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(alignment: .firstTextBaseline) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(field.name)
+                            .font(.footnote)
+                            .fontWeight(.semibold)
+                        Text(field.fieldId)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                    }
+
+                    Spacer()
+
+                    if field.required {
+                        Text("Required")
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
+
+                    Image(systemName: isDefaultFieldSet(field) ? "checkmark.circle.fill" : "plus.circle")
+                        .foregroundStyle(isDefaultFieldSet(field) ? Color.accentColor : Color.secondary)
                 }
 
-                Spacer()
-
-                if field.required {
-                    Text("Required")
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                }
-            }
-
-            Text(fieldTypeDescription(field))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-            if let allowedValues = allowedValuesSummary(for: field) {
-                Text(allowedValues)
+                Text(fieldTypeDescription(field))
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .lineLimit(2)
+
+                if let allowedValues = allowedValuesSummary(for: field) {
+                    Text(allowedValues)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
             }
         }
+        .buttonStyle(.plain)
         .padding(.vertical, 4)
+    }
+
+    private func isDefaultFieldSet(_ field: JiraCreateFieldMetadata) -> Bool {
+        defaultFieldsObject[field.fieldId] != nil
+    }
+
+    private func toggleDefaultField(_ field: JiraCreateFieldMetadata) {
+        if isDefaultFieldSet(field) {
+            updateDefaultFields { fields in
+                fields.removeValue(forKey: field.fieldId)
+            }
+            fieldTemplateMessage = "Removed \(field.name) from Advanced JSON."
+        } else {
+            addDefaultField(field)
+        }
+        isAdvancedExpanded = true
+    }
+
+    private func addDefaultField(_ field: JiraCreateFieldMetadata) {
+        guard let issueType = selectedIssueType ?? fieldTemplateIssueTypes.first else { return }
+        let normalizedProjectKey = projectKey.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        updateDefaultFields { fields in
+            fields[field.fieldId] = fieldExampleValue(
+                projectKey: normalizedProjectKey,
+                issueType: issueType,
+                field: field
+            )
+        }
+        fieldTemplateMessage = "Added \(field.name) to Advanced JSON."
     }
 
     private func allowedValuesSummary(for field: JiraCreateFieldMetadata) -> String? {
