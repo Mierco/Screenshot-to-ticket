@@ -53,29 +53,37 @@ struct SettingsView: View {
                         }
                         .pickerStyle(.menu)
 
-                        if let activeProfile = settings.activeJiraProfile {
+                        ForEach(settings.jiraProfiles) { profile in
                             NavigationLink {
-                                JiraProfileDetailView(profileID: activeProfile.id)
+                                JiraProfileDetailView(profileID: profile.id)
                                     .environmentObject(settings)
                             } label: {
-                                Label("Edit Selected Profile", systemImage: "slider.horizontal.3")
+                                JiraProfileListRow(
+                                    profile: profile,
+                                    isActive: profile.id == settings.activeJiraProfileID
+                                )
                             }
                         }
                     }
-
-                    Button {
-                        isAddingProfile = true
-                    } label: {
-                        Label("Add Profile", systemImage: "plus.circle")
-                    }
-                    .disabled(!hasJiraConnection)
                 } header: {
-                    Text("Jira Profile")
+                    HStack {
+                        Text("Jira Profile")
+                        Spacer()
+                        Button {
+                            isAddingProfile = true
+                        } label: {
+                            Image(systemName: "plus")
+                                .font(.headline)
+                        }
+                        .buttonStyle(.borderless)
+                        .disabled(!hasJiraConnection)
+                        .accessibilityLabel("Add Profile")
+                    }
                 } footer: {
                     if !hasJiraConnection {
                         Text("Add your Jira connection details before creating profiles.")
                     } else {
-                        Text("Choose the active profile here. New profiles open in a separate full-screen flow.")
+                        Text("Choose the active profile here. Tap any profile below to edit it.")
                     }
                 }
 
@@ -186,6 +194,31 @@ struct SettingsView: View {
             authMessage = "Auth OK as \(display). Project \(activeProjectKey) is accessible."
         } catch {
             authMessage = "Access test failed: \(error.localizedDescription)"
+        }
+    }
+}
+
+private struct JiraProfileListRow: View {
+    let profile: JiraProfile
+    let isActive: Bool
+
+    var body: some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(profile.name)
+                    .foregroundStyle(.primary)
+                Text(profile.projectKey)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            if isActive {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(Color.accentColor)
+                    .accessibilityLabel("Active")
+            }
         }
     }
 }
@@ -453,8 +486,10 @@ private struct JiraProfileDetailView: View {
     let profileID: String
 
     @State private var profileName = ""
+    @State private var projectKey = ""
     @State private var defaultFieldsJSON = "{}"
     @State private var message = ""
+    @State private var isSelectingProject = false
     @State private var isShowingDeleteConfirmation = false
 
     var body: some View {
@@ -464,12 +499,20 @@ private struct JiraProfileDetailView: View {
                     TextField("Profile Name", text: $profileName)
                         .textInputAutocapitalization(.words)
                         .autocorrectionDisabled()
+                }
 
-                    LabeledContent("Project Key", value: profile.projectKey)
+                Section("Project") {
+                    LabeledContent("Project Key", value: projectKey)
+
+                    Button {
+                        isSelectingProject = true
+                    } label: {
+                        Label("Change Project", systemImage: "folder.badge.gearshape")
+                    }
                 }
 
                 Section("Default Fields") {
-                    JiraDefaultFieldsEditor(projectKey: profile.projectKey, defaultFieldsJSON: $defaultFieldsJSON)
+                    JiraDefaultFieldsEditor(projectKey: projectKey, defaultFieldsJSON: $defaultFieldsJSON)
                 }
 
                 Section {
@@ -488,6 +531,12 @@ private struct JiraProfileDetailView: View {
                         isShowingDeleteConfirmation = true
                     }
                     .disabled(settings.jiraProfiles.count <= 1)
+
+                    Button {
+                        duplicateProfile()
+                    } label: {
+                        Label("Duplicate Profile", systemImage: "plus.square.on.square")
+                    }
                 }
 
                 if !message.isEmpty {
@@ -528,6 +577,17 @@ private struct JiraProfileDetailView: View {
         .onChange(of: profileID) { _ in
             loadProfileDraft()
         }
+        .fullScreenCover(isPresented: $isSelectingProject) {
+            JiraProjectPickerView(
+                title: "Change Project",
+                currentProjectKey: projectKey,
+                showsExistingProfileBadges: true
+            ) { project in
+                projectKey = project.key
+                message = ""
+            }
+            .environmentObject(settings)
+        }
     }
 
     private var profile: JiraProfile? {
@@ -537,6 +597,7 @@ private struct JiraProfileDetailView: View {
     private var canSave: Bool {
         profile != nil
             && !profileName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !projectKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && defaultFieldsValidationMessage == nil
     }
 
@@ -552,6 +613,7 @@ private struct JiraProfileDetailView: View {
     private func loadProfileDraft() {
         guard let profile else { return }
         profileName = profile.name
+        projectKey = profile.projectKey
         defaultFieldsJSON = profile.defaultFieldsJSON
         message = ""
     }
@@ -559,6 +621,7 @@ private struct JiraProfileDetailView: View {
     private func saveProfile() {
         guard var updatedProfile = profile else { return }
         updatedProfile.name = profileName
+        updatedProfile.projectKey = projectKey
         updatedProfile.defaultFieldsJSON = defaultFieldsJSON
 
         do {
@@ -576,6 +639,176 @@ private struct JiraProfileDetailView: View {
         } catch {
             message = "Delete failed: \(error.localizedDescription)"
         }
+    }
+
+    private func duplicateProfile() {
+        do {
+            let profile = try settings.duplicateProfile(id: profileID)
+            message = "Duplicated as \(profile.name)."
+        } catch {
+            message = "Duplicate failed: \(error.localizedDescription)"
+        }
+    }
+}
+
+private struct JiraProjectPickerView: View {
+    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var settings: SettingsStore
+
+    let title: String
+    let currentProjectKey: String
+    let showsExistingProfileBadges: Bool
+    let onSelect: (JiraProject) -> Void
+
+    @State private var projects: [JiraProject] = []
+    @State private var searchText = ""
+    @State private var message = ""
+    @State private var isLoadingProjects = false
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    if isLoadingProjects {
+                        HStack {
+                            ProgressView()
+                            Text("Loading Jira projects...")
+                                .foregroundStyle(.secondary)
+                        }
+                    } else if projects.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("No projects loaded.")
+                                .foregroundStyle(.secondary)
+                            Button("Load Jira Projects") {
+                                Task { await loadProjects() }
+                            }
+                        }
+                    } else {
+                        ForEach(filteredProjectRows) { row in
+                            projectRow(row.project)
+                        }
+                    }
+                } footer: {
+                    Text("Selecting a project updates this profile draft. Save the profile to persist it.")
+                }
+
+                if !message.isEmpty {
+                    Section {
+                        SettingsMessageView(message: message)
+                    }
+                }
+            }
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
+            .searchable(text: $searchText, prompt: "Search projects")
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel") { dismiss() }
+                }
+
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        Task { await loadProjects() }
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                    .disabled(isLoadingProjects)
+                    .accessibilityLabel("Refresh Jira Projects")
+                }
+            }
+            .task {
+                guard projects.isEmpty else { return }
+                await loadProjects()
+            }
+        }
+    }
+
+    private func projectRow(_ project: JiraProject) -> some View {
+        Button {
+            onSelect(project)
+            dismiss()
+        } label: {
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(project.name)
+                        .foregroundStyle(.primary)
+                    Text(project.key)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                if showsExistingProfileBadges, existingProfile(for: project) != nil {
+                    Text("Profile exists")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                if project.key.uppercased() == currentProjectKey.uppercased() {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(Color.accentColor)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var filteredProjectRows: [ProjectRow] {
+        filteredProjects.map { ProjectRow(project: $0) }
+    }
+
+    private var filteredProjects: [JiraProject] {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !query.isEmpty else { return projects }
+        return projects.filter { project in
+            project.name.lowercased().contains(query)
+                || project.key.lowercased().contains(query)
+        }
+    }
+
+    private func existingProfile(for project: JiraProject) -> JiraProfile? {
+        settings.jiraProfiles.first {
+            $0.projectKey.uppercased() == project.key.uppercased()
+        }
+    }
+
+    private func loadProjects() async {
+        guard hasJiraConnection else {
+            message = "Fill in Jira Workspace URL, email, and API token first."
+            return
+        }
+
+        isLoadingProjects = true
+        message = ""
+        defer { isLoadingProjects = false }
+
+        do {
+            let jira = JiraClient(
+                workspaceURL: settings.workspaceURL,
+                email: settings.jiraEmail,
+                apiToken: settings.jiraApiToken,
+                projectKey: currentProjectKey.isEmpty ? (settings.activeJiraProfile?.projectKey ?? "TMNEWS") : currentProjectKey
+            )
+            projects = try await jira.fetchAccessibleProjects()
+            message = projects.isEmpty
+                ? "No accessible projects found for this account."
+                : ""
+        } catch {
+            message = "Failed to load projects: \(error.localizedDescription)"
+        }
+    }
+
+    private var hasJiraConnection: Bool {
+        !settings.workspaceURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !settings.jiraEmail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !settings.jiraApiToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private struct ProjectRow: Identifiable {
+        let project: JiraProject
+
+        var id: String { project.id }
     }
 }
 

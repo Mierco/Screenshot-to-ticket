@@ -172,6 +172,36 @@ final class SettingsStore: ObservableObject {
         )
     }
 
+    @discardableResult
+    func duplicateProfile(id: String) throws -> JiraProfile {
+        guard let sourceProfile = jiraProfiles.first(where: { $0.id == id }) else {
+            throw NSError(
+                domain: "SettingsStore",
+                code: 8,
+                userInfo: [NSLocalizedDescriptionKey: "Jira profile no longer exists."]
+            )
+        }
+
+        let originalProfiles = jiraProfiles
+        let originalActiveProfileID = activeJiraProfileID
+        let profile = JiraProfile(
+            name: duplicateProfileName(for: sourceProfile.name),
+            projectKey: sourceProfile.projectKey,
+            defaultFieldsJSON: sourceProfile.defaultFieldsJSON
+        )
+        jiraProfiles.append(profile)
+
+        do {
+            try persistProfiles()
+        } catch {
+            jiraProfiles = originalProfiles
+            activeJiraProfileID = originalActiveProfileID
+            throw error
+        }
+
+        return jiraProfiles.first { $0.id == profile.id } ?? profile
+    }
+
     func updateProfile(_ profile: JiraProfile) throws {
         guard let index = jiraProfiles.firstIndex(where: { $0.id == profile.id }) else { return }
         let originalProfiles = jiraProfiles
@@ -316,6 +346,23 @@ final class SettingsStore: ObservableObject {
     private func persistActiveProfileSelection() {
         defaults.set(activeJiraProfileID, forKey: DefaultsKey.activeJiraProfileID)
         defaults.set(activeJiraProfile?.projectKey ?? "", forKey: DefaultsKey.legacyProjectKey)
+    }
+
+    private func duplicateProfileName(for name: String) -> String {
+        let baseName = name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? "Jira Profile"
+            : name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let existingNames = Set(jiraProfiles.map { $0.name })
+        let firstCandidate = "\(baseName) Copy"
+        guard existingNames.contains(firstCandidate) else {
+            return firstCandidate
+        }
+
+        var suffix = 2
+        while existingNames.contains("\(firstCandidate) \(suffix)") {
+            suffix += 1
+        }
+        return "\(firstCandidate) \(suffix)"
     }
 
     private static func parseDefaultFieldsJSON(_ json: String) throws -> [String: Any] {
