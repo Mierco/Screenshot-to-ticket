@@ -35,13 +35,13 @@ Suggested value: `Needed to pick screenshots to attach to Jira issues.`
 ## Runtime configuration
 
 Open the app, tap `Settings`, then fill:
-- Jira Workspace URL (default: `https://iagentur.jira.com`)
+- Jira Workspace URL
 - Atlassian Email
 - Jira API Token
 - OpenAI API Key
-- OpenAI Model ID (fully configurable; default: `gpt-5.4-codex`)
+- OpenAI Model ID (fully configurable)
 
-Credentials are stored in Keychain. Workspace URL, Jira profiles, active profile, and model are stored in `UserDefaults`.
+Fresh installs start without a Jira profile. Credentials are stored in Keychain. Workspace URL, Jira profiles, active profile, and model are stored in `UserDefaults`.
 
 Settings only selects the active Jira profile. To create or edit profiles:
 - open `Add Profile` to launch the full-screen profile creation flow

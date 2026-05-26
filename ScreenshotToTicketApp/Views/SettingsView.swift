@@ -82,6 +82,8 @@ struct SettingsView: View {
                 } footer: {
                     if !hasJiraConnection {
                         Text("Add your Jira connection details before creating profiles.")
+                    } else if settings.jiraProfiles.isEmpty {
+                        Text("Create a Jira profile before submitting tickets.")
                     } else {
                         Text("Choose the active profile here. Tap any profile below to edit it.")
                     }
@@ -179,7 +181,7 @@ struct SettingsView: View {
                 workspaceURL: settings.workspaceURL,
                 email: settings.jiraEmail,
                 apiToken: settings.jiraApiToken,
-                projectKey: activeProjectKey.isEmpty ? "TMNEWS" : activeProjectKey
+                projectKey: activeProjectKey
             )
 
             let me = try await jira.fetchCurrentUser()
@@ -433,7 +435,7 @@ private struct AddJiraProfileView: View {
                 workspaceURL: settings.workspaceURL,
                 email: settings.jiraEmail,
                 apiToken: settings.jiraApiToken,
-                projectKey: settings.activeJiraProfile?.projectKey ?? "TMNEWS"
+                projectKey: settings.activeJiraProfile?.projectKey ?? ""
             )
             projects = try await jira.fetchAccessibleProjects()
             selectedProjectID = ""
@@ -530,7 +532,6 @@ private struct JiraProfileDetailView: View {
                     Button("Delete Profile", role: .destructive) {
                         isShowingDeleteConfirmation = true
                     }
-                    .disabled(settings.jiraProfiles.count <= 1)
 
                     Button {
                         duplicateProfile()
@@ -571,7 +572,7 @@ private struct JiraProfileDetailView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("At least one profile must remain.")
+            Text("This removes the profile from this device.")
         }
         .onAppear(perform: loadProfileDraft)
         .onChange(of: profileID) { _ in
@@ -788,7 +789,7 @@ private struct JiraProjectPickerView: View {
                 workspaceURL: settings.workspaceURL,
                 email: settings.jiraEmail,
                 apiToken: settings.jiraApiToken,
-                projectKey: currentProjectKey.isEmpty ? (settings.activeJiraProfile?.projectKey ?? "TMNEWS") : currentProjectKey
+                projectKey: currentProjectKey.isEmpty ? (settings.activeJiraProfile?.projectKey ?? "") : currentProjectKey
             )
             projects = try await jira.fetchAccessibleProjects()
             message = projects.isEmpty
@@ -823,6 +824,7 @@ private struct JiraDefaultFieldsEditor: View {
     @State private var fieldTemplateProjectKey = ""
     @State private var fieldTemplateIssueTypes: [JiraIssueType] = []
     @State private var fieldTemplateFields: [JiraCreateFieldMetadata] = []
+    @State private var projectVersions: [JiraVersion] = []
     @State private var selectedFieldTemplateIssueTypeID = ""
     @State private var fieldTemplateJSON = ""
     @State private var fieldTemplateMessage = ""
@@ -830,7 +832,16 @@ private struct JiraDefaultFieldsEditor: View {
     private let issueTypeOptions = ["", "Bug", "Task", "Story", "Epic", "Sub-task"]
     private let priorityOptions = ["", "Highest", "High", "Medium", "Low", "Lowest"]
     private let guidedDefaultFieldKeys: Set<String> = ["issuetype", "priority", "labels"]
-    private let appManagedDefaultFieldKeys: Set<String> = ["project", "summary", "description", "fixversions"]
+    private let appManagedDefaultFieldKeys: Set<String> = ["project", "summary", "description"]
+    private let hiddenDefaultFieldKeys: Set<String> = ["project", "summary", "description"]
+    private let versionModeOff = "off"
+    private let versionModeAuto = "auto"
+    private let versionModeManual = "manual"
+
+    private struct VersionOption: Identifiable {
+        let id: String
+        let name: String
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -895,11 +906,15 @@ private struct JiraDefaultFieldsEditor: View {
                 .autocorrectionDisabled()
                 .disabled(hasInvalidJSON)
 
-            if !visibleFieldMetadata.isEmpty {
+            if !visibleFieldMetadata.isEmpty || !fieldTemplateFields.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Available Project Fields")
                         .font(.subheadline)
                         .fontWeight(.semibold)
+
+                    if !hasFixVersionsMetadata {
+                        automaticFixVersionsRow
+                    }
 
                     ForEach(visibleFieldMetadata, id: \.fieldId) { field in
                         fieldMetadataRow(field)
@@ -922,7 +937,7 @@ private struct JiraDefaultFieldsEditor: View {
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
 
-                Text("Use advanced JSON for custom Jira fields. The app sets project, summary, description, and fixVersions.")
+                Text("Use advanced JSON for custom Jira fields. The app sets project, summary, and description.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             } label: {
@@ -1044,12 +1059,46 @@ private struct JiraDefaultFieldsEditor: View {
 
     private var visibleFieldMetadata: [JiraCreateFieldMetadata] {
         fieldTemplateFields.filter {
-            !appManagedDefaultFieldKeys.contains($0.fieldId.lowercased())
+            !hiddenDefaultFieldKeys.contains($0.fieldId.lowercased())
                 && !guidedDefaultFieldKeys.contains($0.fieldId.lowercased())
         }
     }
 
+    private var hasFixVersionsMetadata: Bool {
+        fieldTemplateFields.contains { $0.fieldId.lowercased() == "fixversions" }
+    }
+
+    private var automaticFixVersionsRow: some View {
+        versionFieldRow(
+            field: nil,
+            fieldID: "fixVersions",
+            name: "Fix versions",
+            allowsOff: false,
+            implicitAuto: true
+        )
+    }
+
     private func fieldMetadataRow(_ field: JiraCreateFieldMetadata) -> some View {
+        if isVersionField(field) {
+            return AnyView(
+                versionFieldRow(
+                    field: field,
+                    fieldID: field.fieldId,
+                    name: field.name,
+                    allowsOff: field.fieldId.lowercased() != "fixversions",
+                    implicitAuto: field.fieldId.lowercased() == "fixversions"
+                )
+            )
+        }
+
+        if field.allowedValues?.isEmpty == false {
+            return AnyView(allowedValueFieldRow(field))
+        }
+
+        return AnyView(genericFieldMetadataRow(field))
+    }
+
+    private func genericFieldMetadataRow(_ field: JiraCreateFieldMetadata) -> some View {
         Button {
             toggleDefaultField(field)
         } label: {
@@ -1073,13 +1122,29 @@ private struct JiraDefaultFieldsEditor: View {
                             .foregroundStyle(.red)
                     }
 
-                    Image(systemName: isDefaultFieldSet(field) ? "checkmark.circle.fill" : "plus.circle")
-                        .foregroundStyle(isDefaultFieldSet(field) ? Color.accentColor : Color.secondary)
+                    if isAppManagedField(field) {
+                        Text("Auto")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Image(systemName: isDefaultFieldSet(field) ? "checkmark.circle.fill" : "plus.circle")
+                            .foregroundStyle(isDefaultFieldSet(field) ? Color.accentColor : Color.secondary)
+                    }
                 }
 
-                Text(fieldTypeDescription(field))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                if isAppManagedField(field) {
+                    Text("Set automatically to \(JiraDynamicFieldValue.latestUnreleasedVersionLabel).")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else if isVersionField(field) {
+                    Text("Tap to use \(JiraDynamicFieldValue.latestUnreleasedVersionLabel).")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text(fieldTypeDescription(field))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
 
                 if let allowedValues = allowedValuesSummary(for: field) {
                     Text(allowedValues)
@@ -1093,11 +1158,374 @@ private struct JiraDefaultFieldsEditor: View {
         .padding(.vertical, 4)
     }
 
+    private func allowedValueFieldRow(_ field: JiraCreateFieldMetadata) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(field.name)
+                        .font(.footnote)
+                        .fontWeight(.semibold)
+                    Text(field.fieldId)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
+
+                Spacer()
+
+                if field.required {
+                    Text("Required")
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+
+                Image(systemName: isDefaultFieldSet(field) ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(isDefaultFieldSet(field) ? Color.accentColor : Color.secondary)
+            }
+
+            HStack {
+                Text("Value")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Picker("Value", selection: allowedValueSelection(field: field)) {
+                    Text("Not Set")
+                        .tag("")
+                    ForEach(field.allowedValues ?? [], id: \.stableID) { value in
+                        Text(value.label ?? value.stableID)
+                            .tag(value.stableID)
+                    }
+                }
+                .pickerStyle(.menu)
+                .labelsHidden()
+                .disabled(hasInvalidJSON)
+            }
+
+            Text(fieldTypeDescription(field))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 6)
+    }
+
+    private func versionFieldRow(
+        field: JiraCreateFieldMetadata?,
+        fieldID: String,
+        name: String,
+        allowsOff: Bool,
+        implicitAuto: Bool
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(name)
+                        .font(.footnote)
+                        .fontWeight(.semibold)
+                    Text(fieldID)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
+
+                Spacer()
+
+                if field?.required == true {
+                    Text("Required")
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+            }
+
+            HStack {
+                Text("Mode")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Picker("Mode", selection: versionModeSelection(fieldID: fieldID, field: field, implicitAuto: implicitAuto)) {
+                    if allowsOff {
+                        Text("Not Set")
+                            .tag(versionModeOff)
+                    }
+                    Text("Auto")
+                        .tag(versionModeAuto)
+                    Text("Manual")
+                        .tag(versionModeManual)
+                }
+                .pickerStyle(.menu)
+                .labelsHidden()
+                .controlSize(.small)
+            }
+
+            if versionMode(fieldID: fieldID, implicitAuto: implicitAuto) == versionModeManual {
+                if versionOptions(for: field).isEmpty {
+                    Text("No Jira versions are available for manual selection.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    HStack {
+                        Text("Version")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Picker("Version", selection: manualVersionSelection(fieldID: fieldID, field: field)) {
+                            ForEach(versionOptions(for: field)) { option in
+                                Text(option.name)
+                                    .tag(option.id)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .labelsHidden()
+                        .controlSize(.small)
+                    }
+                }
+            } else if versionMode(fieldID: fieldID, implicitAuto: implicitAuto) == versionModeAuto {
+                Text("Auto: \(JiraDynamicFieldValue.latestUnreleasedVersionLabel)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            if let field {
+                Text(fieldTypeDescription(field))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 6)
+    }
+
     private func isDefaultFieldSet(_ field: JiraCreateFieldMetadata) -> Bool {
         defaultFieldsObject[field.fieldId] != nil
     }
 
+    private func isAppManagedField(_ field: JiraCreateFieldMetadata) -> Bool {
+        appManagedDefaultFieldKeys.contains(field.fieldId.lowercased())
+    }
+
+    private func allowedValueSelection(field: JiraCreateFieldMetadata) -> Binding<String> {
+        Binding(
+            get: {
+                selectedAllowedValueID(for: field) ?? ""
+            },
+            set: { valueID in
+                let selectedValue = field.allowedValues?.first { $0.stableID == valueID }
+                updateDefaultFields { fields in
+                    guard let selectedValue else {
+                        fields.removeValue(forKey: field.fieldId)
+                        return
+                    }
+
+                    fields[field.fieldId] = allowedFieldValue(field: field, value: selectedValue)
+                }
+
+                if let selectedValue {
+                    fieldTemplateMessage = "\(field.name) uses \(selectedValue.label ?? selectedValue.stableID)."
+                } else {
+                    fieldTemplateMessage = "Removed \(field.name) from Advanced JSON."
+                }
+                isAdvancedExpanded = true
+            }
+        )
+    }
+
+    private func selectedAllowedValueID(for field: JiraCreateFieldMetadata) -> String? {
+        guard let value = defaultFieldsObject[field.fieldId],
+              let allowedValues = field.allowedValues,
+              !allowedValues.isEmpty else {
+            return nil
+        }
+
+        return matchingAllowedValueID(in: value, allowedValues: allowedValues)
+    }
+
+    private func matchingAllowedValueID(in value: Any, allowedValues: [JiraFieldAllowedValue]) -> String? {
+        if let array = value as? [Any] {
+            return array.compactMap { matchingAllowedValueID(in: $0, allowedValues: allowedValues) }.first
+        }
+
+        if let object = value as? [String: Any] {
+            let candidates = ["id", "accountId", "key", "name", "value", "displayName"]
+                .compactMap { object[$0] as? String }
+            return matchingAllowedValueID(candidates: candidates, allowedValues: allowedValues)
+        }
+
+        if let string = value as? String {
+            return matchingAllowedValueID(candidates: [string], allowedValues: allowedValues)
+        }
+
+        return nil
+    }
+
+    private func matchingAllowedValueID(
+        candidates: [String],
+        allowedValues: [JiraFieldAllowedValue]
+    ) -> String? {
+        for candidate in candidates {
+            for allowedValue in allowedValues where allowedValue.matches(candidate) {
+                return allowedValue.stableID
+            }
+        }
+        return nil
+    }
+
+    private func allowedFieldValue(field: JiraCreateFieldMetadata, value: JiraFieldAllowedValue) -> Any {
+        let value = allowedValueExample(value)
+        if field.schema?.type?.lowercased() == "array" {
+            return [value]
+        }
+        return value
+    }
+
+    private func versionMode(fieldID: String, implicitAuto: Bool) -> String {
+        guard let value = defaultFieldsObject[fieldID] else {
+            return implicitAuto ? versionModeAuto : versionModeOff
+        }
+        return containsLatestUnreleasedVersionPlaceholder(value) ? versionModeAuto : versionModeManual
+    }
+
+    private func versionModeSelection(
+        fieldID: String,
+        field: JiraCreateFieldMetadata?,
+        implicitAuto: Bool
+    ) -> Binding<String> {
+        Binding(
+            get: {
+                versionMode(fieldID: fieldID, implicitAuto: implicitAuto)
+            },
+            set: { mode in
+                switch mode {
+                case versionModeOff:
+                    updateDefaultFields { fields in
+                        fields.removeValue(forKey: fieldID)
+                    }
+                    fieldTemplateMessage = "Removed \(field?.name ?? fieldID) from Advanced JSON."
+                case versionModeAuto:
+                    updateDefaultFields { fields in
+                        fields[fieldID] = versionFieldValue(
+                            fieldID: fieldID,
+                            field: field,
+                            value: latestUnreleasedVersionPlaceholder()
+                        )
+                    }
+                    fieldTemplateMessage = "\(field?.name ?? fieldID) uses \(JiraDynamicFieldValue.latestUnreleasedVersionLabel)."
+                case versionModeManual:
+                    let options = versionOptions(for: field)
+                    let selectedID = currentManualVersionID(fieldID: fieldID) ?? options.first?.id
+                    guard let selectedID,
+                          let option = options.first(where: { $0.id == selectedID }) else {
+                        fieldTemplateMessage = "No Jira versions are available for \(field?.name ?? fieldID)."
+                        return
+                    }
+                    updateDefaultFields { fields in
+                        fields[fieldID] = versionFieldValue(
+                            fieldID: fieldID,
+                            field: field,
+                            value: [
+                                "id": option.id,
+                                "name": option.name
+                            ]
+                        )
+                    }
+                    fieldTemplateMessage = "\(field?.name ?? fieldID) uses \(option.name)."
+                default:
+                    return
+                }
+                isAdvancedExpanded = true
+            }
+        )
+    }
+
+    private func manualVersionSelection(
+        fieldID: String,
+        field: JiraCreateFieldMetadata?
+    ) -> Binding<String> {
+        Binding(
+            get: {
+                currentManualVersionID(fieldID: fieldID) ?? versionOptions(for: field).first?.id ?? ""
+            },
+            set: { versionID in
+                guard let option = versionOptions(for: field).first(where: { $0.id == versionID }) else { return }
+                updateDefaultFields { fields in
+                    fields[fieldID] = versionFieldValue(
+                        fieldID: fieldID,
+                        field: field,
+                        value: [
+                            "id": option.id,
+                            "name": option.name
+                        ]
+                    )
+                }
+                fieldTemplateMessage = "\(field?.name ?? fieldID) uses \(option.name)."
+            }
+        )
+    }
+
+    private func versionOptions(for field: JiraCreateFieldMetadata?) -> [VersionOption] {
+        if let allowedValues = field?.allowedValues, !allowedValues.isEmpty {
+            return allowedValues.compactMap { value in
+                guard let label = value.label else { return nil }
+                return VersionOption(id: value.stableID, name: label)
+            }
+        }
+
+        return projectVersions
+            .filter { ($0.archived ?? false) == false }
+            .map { VersionOption(id: $0.id, name: $0.name) }
+    }
+
+    private func currentManualVersionID(fieldID: String) -> String? {
+        guard let value = defaultFieldsObject[fieldID],
+              !containsLatestUnreleasedVersionPlaceholder(value) else {
+            return nil
+        }
+        return versionID(from: value)
+    }
+
+    private func versionID(from value: Any) -> String? {
+        if let object = value as? [String: Any] {
+            return object["id"] as? String
+        }
+
+        if let array = value as? [Any] {
+            return array.compactMap(versionID).first
+        }
+
+        return nil
+    }
+
+    private func containsLatestUnreleasedVersionPlaceholder(_ value: Any) -> Bool {
+        if let object = value as? [String: Any] {
+            if object["id"] as? String == JiraDynamicFieldValue.latestUnreleasedVersionID {
+                return true
+            }
+            return object.values.contains { containsLatestUnreleasedVersionPlaceholder($0) }
+        }
+
+        if let array = value as? [Any] {
+            return array.contains { containsLatestUnreleasedVersionPlaceholder($0) }
+        }
+
+        return false
+    }
+
+    private func versionFieldValue(
+        fieldID: String,
+        field: JiraCreateFieldMetadata?,
+        value: [String: String]
+    ) -> Any {
+        if fieldID.lowercased() == "versions"
+            || fieldID.lowercased() == "fixversions"
+            || field?.schema?.type?.lowercased() == "array" {
+            return [value]
+        }
+        return value
+    }
+
     private func toggleDefaultField(_ field: JiraCreateFieldMetadata) {
+        if isAppManagedField(field) {
+            fieldTemplateMessage = "\(field.name) is set automatically to \(JiraDynamicFieldValue.latestUnreleasedVersionLabel) when creating issues."
+            return
+        }
+
         if isDefaultFieldSet(field) {
             updateDefaultFields { fields in
                 fields.removeValue(forKey: field.fieldId)
@@ -1251,6 +1679,7 @@ private struct JiraDefaultFieldsEditor: View {
                 fieldTemplateProjectKey = normalizedProjectKey
                 fieldTemplateIssueTypes = []
                 fieldTemplateFields = []
+                projectVersions = []
                 selectedFieldTemplateIssueTypeID = ""
                 fieldTemplateJSON = ""
             }
@@ -1265,6 +1694,10 @@ private struct JiraDefaultFieldsEditor: View {
             if fieldTemplateIssueTypes.isEmpty {
                 fieldTemplateIssueTypes = try await jira.fetchCreateIssueTypes(projectKey: normalizedProjectKey)
                 selectedFieldTemplateIssueTypeID = preferredIssueTypeID(from: fieldTemplateIssueTypes)
+            }
+
+            if projectVersions.isEmpty {
+                projectVersions = try await jira.fetchProjectVersions()
             }
 
             guard let issueType = fieldTemplateIssueTypes.first(where: { $0.id == selectedFieldTemplateIssueTypeID }) else {
@@ -1304,6 +1737,9 @@ private struct JiraDefaultFieldsEditor: View {
                 apiToken: settings.jiraApiToken,
                 projectKey: normalizedProjectKey
             )
+            if projectVersions.isEmpty {
+                projectVersions = try await jira.fetchProjectVersions()
+            }
             let fields = try await jira.fetchCreateFields(projectKey: normalizedProjectKey, issueTypeId: issueType.id)
             fieldTemplateFields = fields
             fieldTemplateJSON = fieldReferenceTemplateJSON(projectKey: normalizedProjectKey, issueType: issueType, fields: fields)
@@ -1456,7 +1892,15 @@ private struct JiraDefaultFieldsEditor: View {
         }
 
         if fieldID == "fixversions" {
-            return [["id": "<version id>"]]
+            return [latestUnreleasedVersionPlaceholder()]
+        }
+
+        if isVersionField(field) {
+            let placeholder = latestUnreleasedVersionPlaceholder()
+            if field.schema?.type?.lowercased() == "array" {
+                return [placeholder]
+            }
+            return placeholder
         }
 
         if let allowedValue = field.allowedValues?.first {
@@ -1495,6 +1939,27 @@ private struct JiraDefaultFieldsEditor: View {
         default:
             return placeholder
         }
+    }
+
+    private func isVersionField(_ field: JiraCreateFieldMetadata) -> Bool {
+        let fieldID = field.fieldId.lowercased()
+        let schemaType = field.schema?.type?.lowercased()
+        let schemaItems = field.schema?.items?.lowercased()
+        let schemaSystem = field.schema?.system?.lowercased()
+
+        return fieldID == "versions"
+            || fieldID == "fixversions"
+            || schemaType == "version"
+            || schemaItems == "version"
+            || schemaSystem == "versions"
+            || schemaSystem == "fixversions"
+    }
+
+    private func latestUnreleasedVersionPlaceholder() -> [String: String] {
+        [
+            "id": JiraDynamicFieldValue.latestUnreleasedVersionID,
+            "name": JiraDynamicFieldValue.latestUnreleasedVersionLabel
+        ]
     }
 
     private func allowedValueReference(_ value: JiraFieldAllowedValue) -> [String: String] {
@@ -1561,5 +2026,18 @@ private struct SettingsMessageView: View {
 private extension JiraFieldAllowedValue {
     var stableID: String {
         id ?? accountId ?? key ?? name ?? value ?? displayName ?? "unnamed"
+    }
+
+    func matches(_ candidate: String) -> Bool {
+        let candidate = candidate.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !candidate.isEmpty else { return false }
+
+        let exactValues = [stableID, id, accountId, key].compactMap { $0 }
+        if exactValues.contains(where: { $0.caseInsensitiveCompare(candidate) == .orderedSame }) {
+            return true
+        }
+
+        let labelValues = [name, value, displayName, label].compactMap { $0 }
+        return labelValues.contains { $0.caseInsensitiveCompare(candidate) == .orderedSame }
     }
 }

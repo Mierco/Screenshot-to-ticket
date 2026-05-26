@@ -48,6 +48,11 @@ struct JiraIssueResponse: Decodable {
     let `self`: String
 }
 
+enum JiraDynamicFieldValue {
+    static let latestUnreleasedVersionID = "__latestUnreleasedVersion"
+    static let latestUnreleasedVersionLabel = "Latest unreleased version"
+}
+
 struct JiraIssueType: Decodable, Identifiable, Equatable {
     let id: String
     let name: String

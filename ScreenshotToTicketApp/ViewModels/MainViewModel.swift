@@ -181,13 +181,17 @@ final class MainViewModel: ObservableObject {
 
             status = "Resolving fix version..."
             let fixVersion = try await jira.fetchBiggestUnreleasedVersion()
+            let resolvedDefaultFields = try Self.resolvedDefaultFields(
+                defaultFields,
+                latestUnreleasedVersion: fixVersion
+            )
 
             status = "Creating Jira issue..."
             let issue = try await jira.createIssue(
                 summary: draft.summary,
                 description: jira.adfDescription(from: descriptionText),
                 fixVersionId: fixVersion?.id,
-                defaultFields: defaultFields
+                defaultFields: resolvedDefaultFields
             )
 
             status = "Uploading media..."
@@ -332,6 +336,54 @@ final class MainViewModel: ObservableObject {
             throw NSError(domain: "MainViewModel", code: 1, userInfo: [NSLocalizedDescriptionKey: "Could not encode annotated image"])
         }
         return data
+    }
+
+    private static func resolvedDefaultFields(
+        _ fields: [String: Any],
+        latestUnreleasedVersion: JiraVersion?
+    ) throws -> [String: Any] {
+        try resolveDynamicDefaultFieldValue(
+            fields,
+            latestUnreleasedVersion: latestUnreleasedVersion
+        ) as? [String: Any] ?? fields
+    }
+
+    private static func resolveDynamicDefaultFieldValue(
+        _ value: Any,
+        latestUnreleasedVersion: JiraVersion?
+    ) throws -> Any {
+        if let object = value as? [String: Any] {
+            if object["id"] as? String == JiraDynamicFieldValue.latestUnreleasedVersionID {
+                guard let latestUnreleasedVersion else {
+                    throw NSError(
+                        domain: "MainViewModel",
+                        code: 8,
+                        userInfo: [NSLocalizedDescriptionKey: "A profile uses \(JiraDynamicFieldValue.latestUnreleasedVersionLabel), but this project has no unreleased versions."]
+                    )
+                }
+                return ["id": latestUnreleasedVersion.id]
+            }
+
+            var resolved: [String: Any] = [:]
+            for (key, value) in object {
+                resolved[key] = try resolveDynamicDefaultFieldValue(
+                    value,
+                    latestUnreleasedVersion: latestUnreleasedVersion
+                )
+            }
+            return resolved
+        }
+
+        if let array = value as? [Any] {
+            return try array.map {
+                try resolveDynamicDefaultFieldValue(
+                    $0,
+                    latestUnreleasedVersion: latestUnreleasedVersion
+                )
+            }
+        }
+
+        return value
     }
 
     private func clampedPoint(_ point: CGPoint) -> CGPoint {

@@ -37,8 +37,7 @@ final class SettingsStore: ObservableObject {
     private static let reservedDefaultFieldKeys: Set<String> = [
         "project",
         "summary",
-        "description",
-        "fixversions"
+        "description"
     ]
 
     private let defaults = UserDefaults.standard
@@ -48,19 +47,29 @@ final class SettingsStore: ObservableObject {
         jiraApiToken = KeychainService.shared.read(.jiraApiToken)
         openAIKey = KeychainService.shared.read(.openAIKey)
 
-        workspaceURL = defaults.string(forKey: DefaultsKey.workspaceURL) ?? "https://iagentur.jira.com"
+        let storedWorkspaceURL = defaults.string(forKey: DefaultsKey.workspaceURL)
+        workspaceURL = storedWorkspaceURL ?? ""
         model = defaults.string(forKey: DefaultsKey.openAIModel) ?? "gpt-5.5"
         reasoningEffort = defaults.string(forKey: DefaultsKey.reasoningEffort).flatMap(ReasoningEffort.init(rawValue:)) ?? .medium
         ticketPrompt = defaults.string(forKey: DefaultsKey.ticketPrompt).flatMap {
             $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0
         } ?? OpenAIClient.defaultTicketPrompt
 
-        let legacyProjectKey = defaults.string(forKey: DefaultsKey.legacyProjectKey) ?? "TMNEWS"
-        let storedProfiles = Self.loadProfiles(from: defaults)
+        let legacyProjectKey = defaults.string(forKey: DefaultsKey.legacyProjectKey)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let hasStoredProfilesData = defaults.data(forKey: DefaultsKey.jiraProfiles) != nil
+        let loadedStoredProfiles = Self.loadProfiles(from: defaults)
+        let storedProfiles = Self.removingGeneratedLegacyProfile(
+            from: loadedStoredProfiles,
+            legacyProjectKey: legacyProjectKey,
+            hasStoredWorkspaceURL: storedWorkspaceURL != nil
+        )
+        let didRemoveGeneratedLegacyProfile = storedProfiles.count != loadedStoredProfiles.count
+        let sourceProfiles = !hasStoredProfilesData && !legacyProjectKey.isEmpty
+            ? [JiraProfile(name: legacyProjectKey.uppercased(), projectKey: legacyProjectKey)]
+            : storedProfiles
         let loadedProfiles = Self.normalizedProfiles(
-            storedProfiles.isEmpty
-                ? [JiraProfile(name: legacyProjectKey.uppercased(), projectKey: legacyProjectKey)]
-                : storedProfiles
+            sourceProfiles
         )
         let loadedActiveProfileID = Self.validActiveProfileID(
             defaults.string(forKey: DefaultsKey.activeJiraProfileID),
@@ -69,7 +78,8 @@ final class SettingsStore: ObservableObject {
         jiraProfiles = loadedProfiles
         activeJiraProfileID = loadedActiveProfileID
 
-        if storedProfiles.isEmpty, let encodedProfiles = try? JSONEncoder().encode(jiraProfiles) {
+        if didRemoveGeneratedLegacyProfile || (!hasStoredProfilesData && !jiraProfiles.isEmpty),
+           let encodedProfiles = try? JSONEncoder().encode(jiraProfiles) {
             defaults.set(encodedProfiles, forKey: DefaultsKey.jiraProfiles)
             defaults.set(activeJiraProfileID, forKey: DefaultsKey.activeJiraProfileID)
             defaults.set(activeJiraProfile?.projectKey ?? "", forKey: DefaultsKey.legacyProjectKey)
@@ -217,15 +227,18 @@ final class SettingsStore: ObservableObject {
     }
 
     func deleteProfile(id: String) throws {
-        guard jiraProfiles.count > 1,
-              let index = jiraProfiles.firstIndex(where: { $0.id == id }) else {
+        guard let index = jiraProfiles.firstIndex(where: { $0.id == id }) else {
             return
         }
 
         let originalProfiles = jiraProfiles
         let originalActiveProfileID = activeJiraProfileID
         jiraProfiles.remove(at: index)
-        activeJiraProfileID = jiraProfiles[min(index, jiraProfiles.count - 1)].id
+        if jiraProfiles.isEmpty {
+            activeJiraProfileID = ""
+        } else if originalActiveProfileID == id || !jiraProfiles.contains(where: { $0.id == activeJiraProfileID }) {
+            activeJiraProfileID = jiraProfiles[min(index, jiraProfiles.count - 1)].id
+        }
         do {
             try persistProfiles()
         } catch {
@@ -296,11 +309,33 @@ final class SettingsStore: ObservableObject {
         return normalized
     }
 
+    private static func removingGeneratedLegacyProfile(
+        from profiles: [JiraProfile],
+        legacyProjectKey: String,
+        hasStoredWorkspaceURL: Bool
+    ) -> [JiraProfile] {
+        guard !hasStoredWorkspaceURL,
+              profiles.count == 1,
+              !legacyProjectKey.isEmpty,
+              let profile = profiles.first else {
+            return profiles
+        }
+
+        let normalizedLegacyProjectKey = legacyProjectKey.uppercased()
+        let normalizedDefaultFieldsJSON = profile.defaultFieldsJSON.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard profile.projectKey.uppercased() == normalizedLegacyProjectKey,
+              profile.name.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() == normalizedLegacyProjectKey,
+              normalizedDefaultFieldsJSON.isEmpty || normalizedDefaultFieldsJSON == "{}" else {
+            return profiles
+        }
+
+        return []
+    }
+
     private static func normalizedProfiles(_ profiles: [JiraProfile]) -> [JiraProfile] {
-        let sourceProfiles = profiles.isEmpty ? [JiraProfile(name: "TMNEWS", projectKey: "TMNEWS")] : profiles
         var seenIDs: Set<String> = []
 
-        return sourceProfiles.map { profile in
+        return profiles.map { profile in
             var normalized = profile
             let trimmedID = normalized.id.trimmingCharacters(in: .whitespacesAndNewlines)
             if trimmedID.isEmpty || seenIDs.contains(trimmedID) {
@@ -330,7 +365,7 @@ final class SettingsStore: ObservableObject {
         if let activeID, profiles.contains(where: { $0.id == activeID }) {
             return activeID
         }
-        return profiles.first?.id ?? UUID().uuidString
+        return profiles.first?.id ?? ""
     }
 
     private func persistProfiles() throws {

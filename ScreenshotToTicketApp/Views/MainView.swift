@@ -78,14 +78,18 @@ struct MainView: View {
                 }
 
                 Section("Submit") {
-                    Picker("Jira Profile", selection: activeJiraProfileSelection) {
-                        ForEach(settings.jiraProfiles) { profile in
-                            Text("\(profile.name) (\(profile.projectKey))")
-                                .tag(profile.id)
+                    if settings.jiraProfiles.isEmpty {
+                        Text("No Jira profile selected.")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Picker("Jira Profile", selection: activeJiraProfileSelection) {
+                            ForEach(settings.jiraProfiles) { profile in
+                                Text("\(profile.name) (\(profile.projectKey))")
+                                    .tag(profile.id)
+                            }
                         }
+                        .pickerStyle(.menu)
                     }
-                    .pickerStyle(.menu)
-                    .disabled(settings.jiraProfiles.isEmpty)
 
                     Button {
                         Task { await vm.submit(settings: settings) }

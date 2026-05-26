@@ -90,13 +90,7 @@ struct JiraClient {
     }
 
     func fetchBiggestUnreleasedVersion() async throws -> JiraVersion? {
-        let endpoint = apiURL("/rest/api/3/project/\(projectKey)/versions")
-        let request = try buildRequest(urlString: endpoint, method: "GET")
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-        try validate(response: response, data: data)
-        let versions = try JSONDecoder().decode([JiraVersion].self, from: data)
-
+        let versions = try await fetchProjectVersions()
         let candidates = versions.filter { ($0.released ?? false) == false && ($0.archived ?? false) == false }
 
         return candidates
@@ -106,6 +100,15 @@ struct JiraClient {
             }
             .max(by: { $0.1 < $1.1 })?
             .0
+    }
+
+    func fetchProjectVersions() async throws -> [JiraVersion] {
+        let endpoint = apiURL("/rest/api/3/project/\(projectKey)/versions")
+        let request = try buildRequest(urlString: endpoint, method: "GET")
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        try validate(response: response, data: data)
+        return try JSONDecoder().decode([JiraVersion].self, from: data)
     }
 
     func createIssue(
@@ -127,7 +130,7 @@ struct JiraClient {
             "description": description
         ]) { _, appValue in appValue }
 
-        if let id = fixVersionId {
+        if let id = fixVersionId, fields["fixVersions"] == nil {
             fields["fixVersions"] = [["id": id]]
         }
 
