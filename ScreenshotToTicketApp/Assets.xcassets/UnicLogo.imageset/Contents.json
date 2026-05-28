@@ -1,0 +1,13 @@
+{
+  "images" : [
+    {
+      "filename" : "unic-logo-green.png",
+      "idiom" : "universal",
+      "scale" : "1x"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

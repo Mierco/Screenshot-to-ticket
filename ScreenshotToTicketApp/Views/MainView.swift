@@ -5,157 +5,137 @@ import UIKit
 struct MainView: View {
     @EnvironmentObject private var settings: SettingsStore
     @StateObject private var vm = MainViewModel()
-    @State private var showingSettings = false
 
     var body: some View {
-        NavigationStack {
-            Form {
-                Section("Media") {
-                    PhotosPicker(
-                        selection: $vm.selectedItems,
-                        maxSelectionCount: 3,
-                        matching: .any(of: [.images, .videos])
-                    ) {
-                        Text("Select up to 3 images or videos")
-                    }
+        VStack(spacing: 0) {
+            header
 
-                    if vm.isLoadingMedia {
-                        ProgressView("Loading selected media...")
-                    } else {
-                        Text("Selected: \(vm.mediaItems.count)")
-                            .foregroundStyle(.secondary)
-                    }
-                }
+            NavigationStack {
+                Form {
+                    Section("Media") {
+                        PhotosPicker(
+                            selection: $vm.selectedItems,
+                            maxSelectionCount: 3,
+                            matching: .any(of: [.images, .videos])
+                        ) {
+                            Text("Select up to 3 images or videos")
+                        }
 
-                if !vm.mediaItems.isEmpty {
-                    Section("Highlight (Optional)") {
-                        Toggle("Enable markups on screenshots", isOn: $vm.enableMarkup)
-
-                        if vm.enableMarkup {
-                            Text("Draw colored circles around specific areas that you want to report")
-                                .font(.footnote)
+                        if vm.isLoadingMedia {
+                            ProgressView("Loading selected media...")
+                        } else {
+                            Text("Selected: \(vm.mediaItems.count)")
                                 .foregroundStyle(.secondary)
+                        }
+                    }
 
-                            markupColorPalette
+                    if !vm.mediaItems.isEmpty {
+                        Section("Highlight (Optional)") {
+                            Toggle("Enable markups on screenshots", isOn: $vm.enableMarkup)
 
-                            ForEach(vm.mediaItems) { media in
-                                VStack(alignment: .leading, spacing: 8) {
-                                    Text(media.fileName)
+                            if vm.enableMarkup {
+                                Text("Draw colored circles around specific areas that you want to report")
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+
+                                markupColorPalette
+
+                                ForEach(vm.mediaItems) { media in
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        Text(media.fileName)
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+
+                                        ZoomableAnnotationCanvasView(
+                                            image: media.previewImage,
+                                            marks: vm.marksByMediaID[media.id] ?? [],
+                                            interactive: media.isImage && vm.isMarkupDrawingMode,
+                                            opacity: vm.markupOpacity
+                                        ) { point, isStart in
+                                            vm.addFreehandPoint(mediaID: media.id, normalizedPoint: point, beginStroke: isStart)
+                                        }
+
+                                        if media.isImage {
+                                            HStack {
+                                                Button("Undo") { vm.undoMark(mediaID: media.id) }
+                                                Button("Clear") { vm.clearMarks(mediaID: media.id) }
+                                            }
+                                            .buttonStyle(.borderless)
+                                            .font(.footnote)
+                                        } else {
+                                            Text("Markup is available for images only.")
+                                                .font(.footnote)
+                                                .foregroundStyle(.secondary)
+                                        }
+                                    }
+                                    .listRowInsets(EdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 8))
+                                }
+                            }
+                        }
+                    }
+
+                    Section("Hints / Instructions") {
+                        TextEditor(text: $vm.hintText)
+                            .frame(minHeight: 120)
+                    }
+
+                    Section("Submit") {
+                        if settings.jiraProfiles.isEmpty {
+                            Text("No Jira profile selected.")
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Picker("Jira Profile", selection: activeJiraProfileSelection) {
+                                ForEach(settings.jiraProfiles) { profile in
+                                    Text("\(profile.name) (\(profile.projectKey))")
+                                        .tag(profile.id)
+                                }
+                            }
+                            .pickerStyle(.menu)
+                        }
+
+                        Button {
+                            Task { await vm.submit(settings: settings) }
+                        } label: {
+                            if vm.isSubmitting {
+                                ProgressView()
+                            } else {
+                                Text("Create Jira Bug")
+                            }
+                        }
+                        .disabled(vm.isSubmitting)
+
+                        if !vm.status.isEmpty {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text(vm.status)
+                                    .font(.footnote)
+                                    .textSelection(.enabled)
+                                if let issueURL = vm.issueURL {
+                                    Link("Open Jira Issue", destination: issueURL)
+                                        .font(.footnote)
+                                    Text(issueURL.absoluteString)
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
-
-                                    ZoomableAnnotationCanvasView(
-                                        image: media.previewImage,
-                                        marks: vm.marksByMediaID[media.id] ?? [],
-                                        interactive: media.isImage && vm.isMarkupDrawingMode,
-                                        opacity: vm.markupOpacity
-                                    ) { point, isStart in
-                                        vm.addFreehandPoint(mediaID: media.id, normalizedPoint: point, beginStroke: isStart)
-                                    }
-
-                                    if media.isImage {
-                                        HStack {
-                                            Button("Undo") { vm.undoMark(mediaID: media.id) }
-                                            Button("Clear") { vm.clearMarks(mediaID: media.id) }
-                                        }
-                                        .buttonStyle(.borderless)
-                                        .font(.footnote)
-                                    } else {
-                                        Text("Markup is available for images only.")
-                                            .font(.footnote)
-                                            .foregroundStyle(.secondary)
-                                    }
+                                        .textSelection(.enabled)
                                 }
-                                .listRowInsets(EdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 8))
+                                Button("Copy Message") {
+                                    UIPasteboard.general.string = vm.status
+                                }
+                                .font(.caption)
                             }
                         }
                     }
                 }
-
-                Section("Hints / Instructions") {
-                    TextEditor(text: $vm.hintText)
-                        .frame(minHeight: 120)
-                }
-
-                Section("Submit") {
-                    if settings.jiraProfiles.isEmpty {
-                        Text("No Jira profile selected.")
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Picker("Jira Profile", selection: activeJiraProfileSelection) {
-                            ForEach(settings.jiraProfiles) { profile in
-                                Text("\(profile.name) (\(profile.projectKey))")
-                                    .tag(profile.id)
-                            }
-                        }
-                        .pickerStyle(.menu)
-                    }
-
-                    Button {
-                        Task { await vm.submit(settings: settings) }
-                    } label: {
-                        if vm.isSubmitting {
-                            ProgressView()
-                        } else {
-                            Text("Create Jira Bug")
-                        }
-                    }
-                    .disabled(vm.isSubmitting)
-
-                    if !vm.status.isEmpty {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text(vm.status)
-                                .font(.footnote)
-                                .textSelection(.enabled)
-                            if let issueURL = vm.issueURL {
-                                Link("Open Jira Issue", destination: issueURL)
-                                    .font(.footnote)
-                                Text(issueURL.absoluteString)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .textSelection(.enabled)
-                            }
-                            Button("Copy Message") {
-                                UIPasteboard.general.string = vm.status
-                            }
-                            .font(.caption)
-                        }
+                .navigationBarTitleDisplayMode(.inline)
+                .overlay(alignment: .bottomTrailing) {
+                    if shouldShowFloatingDrawButton {
+                        floatingDrawButton
+                            .padding(.trailing, 18)
+                            .padding(.bottom, 18)
                     }
                 }
-            }
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .principal) {
-                    HStack(spacing: 8) {
-                        Text("Screenshot to Jira")
-                            .font(.headline)
-
-                        Text(AppBuildInfo.badgeText)
-                            .font(.caption.monospaced())
-                            .foregroundStyle(.secondary)
-                    }
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
-                    .accessibilityElement(children: .combine)
-                    .accessibilityLabel("Screenshot to Jira, \(AppBuildInfo.badgeText)")
-                }
-
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Settings") { showingSettings = true }
-                }
-            }
-            .overlay(alignment: .bottomTrailing) {
-                if shouldShowFloatingDrawButton {
-                    floatingDrawButton
-                        .padding(.trailing, 18)
-                        .padding(.bottom, 18)
-                }
-            }
-            .sheet(isPresented: $showingSettings) {
-                SettingsView()
-                    .environmentObject(settings)
             }
         }
+        .background(Color(.systemGroupedBackground))
         .onChange(of: vm.selectedItems) { _ in
             Task { await vm.refreshSelectedMedia() }
         }
@@ -164,6 +144,36 @@ struct MainView: View {
                 vm.isMarkupDrawingMode = false
             }
         }
+    }
+
+    private var header: some View {
+        HStack(spacing: 12) {
+            HStack(spacing: 8) {
+                Text("Screenshot to Jira")
+                    .font(.headline)
+
+                Text(AppBuildInfo.badgeText)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+            }
+            .lineLimit(1)
+            .minimumScaleFactor(0.75)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Screenshot to Jira, \(AppBuildInfo.badgeText)")
+
+            Spacer(minLength: 12)
+
+            Image("UnicLogo")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 42, height: 42)
+                .accessibilityHidden(true)
+        }
+        .frame(height: 56)
+        .padding(.leading, 38)
+        .padding(.trailing, 27)
+        .background(Color(.systemGroupedBackground))
+        .allowsHitTesting(false)
     }
 
     private var shouldShowFloatingDrawButton: Bool {
