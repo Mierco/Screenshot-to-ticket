@@ -4,7 +4,7 @@ options:
     iOS: 16.0
 settings:
   base:
-    PRODUCT_BUNDLE_IDENTIFIER: com.iagentur.screenshottoticket
+    PRODUCT_BUNDLE_IDENTIFIER: com.unicapps.s2t
     SWIFT_VERSION: 5.0
     CODE_SIGN_STYLE: Automatic
     DEVELOPMENT_TEAM: HSYHBF5UDF
@@ -37,6 +37,7 @@ targets:
       path: ScreenshotToTicketApp/Info.plist
       properties:
         CFBundleDisplayName: ScreenshotToTicket
+        CFBundleShortVersionString: 1.1
         UILaunchScreen: {}
         NSPhotoLibraryUsageDescription: Needed to pick screenshots to attach to Jira issues.
     settings:
