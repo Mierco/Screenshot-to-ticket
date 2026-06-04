@@ -13,6 +13,52 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
+                Section {
+                    VStack(alignment: .leading, spacing: 14) {
+                        HStack {
+                            Label(settings.isConfigured ? "Ready to submit" : "Setup incomplete", systemImage: settings.isConfigured ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
+                                .font(.headline)
+                                .foregroundStyle(settings.isConfigured ? settingsAccent : .orange)
+
+                            Spacer()
+
+                            Text(settings.reasoningEffort.label)
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                                .background(Color(.secondarySystemGroupedBackground), in: Capsule())
+                        }
+
+                        VStack(spacing: 0) {
+                            SettingsReadinessRow(
+                                title: "Jira connection",
+                                value: jiraConnectionSummary,
+                                isReady: hasJiraConnection
+                            )
+
+                            Divider()
+                                .padding(.leading, 32)
+
+                            SettingsReadinessRow(
+                                title: "Jira profile",
+                                value: jiraProfileSummary,
+                                isReady: settings.activeJiraProfile != nil
+                            )
+
+                            Divider()
+                                .padding(.leading, 32)
+
+                            SettingsReadinessRow(
+                                title: "OpenAI",
+                                value: openAISummary,
+                                isReady: !settings.openAIKey.isEmpty && !settings.model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                            )
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+
                 Section("Jira Connection") {
                     TextField("Workspace URL", text: $settings.workspaceURL)
                         .textInputAutocapitalization(.never)
@@ -136,6 +182,8 @@ struct SettingsView: View {
                             saveMessage = "Save failed: \(error.localizedDescription)"
                         }
                     }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
 
                     if !saveMessage.isEmpty {
                         SettingsMessageView(message: saveMessage)
@@ -155,6 +203,10 @@ struct SettingsView: View {
         }
     }
 
+    private var settingsAccent: Color {
+        Color(red: 0.57, green: 0.78, blue: 0.00)
+    }
+
     private var hasJiraConnection: Bool {
         !settings.workspaceURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && !settings.jiraEmail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -166,6 +218,25 @@ struct SettingsView: View {
             get: { settings.activeJiraProfileID },
             set: { settings.activateProfile(id: $0) }
         )
+    }
+
+    private var jiraConnectionSummary: String {
+        hasJiraConnection ? "Workspace, email, and token set" : "Workspace URL, email, and API token required"
+    }
+
+    private var jiraProfileSummary: String {
+        guard let profile = settings.activeJiraProfile else {
+            return "Create or select a Jira profile"
+        }
+        return "\(profile.name) - \(profile.projectKey)"
+    }
+
+    private var openAISummary: String {
+        if settings.openAIKey.isEmpty {
+            return "API key required"
+        }
+        let model = settings.model.trimmingCharacters(in: .whitespacesAndNewlines)
+        return model.isEmpty ? "Model ID required" : model
     }
 
     private func testJiraAccess() async {
@@ -197,6 +268,38 @@ struct SettingsView: View {
         } catch {
             authMessage = "Access test failed: \(error.localizedDescription)"
         }
+    }
+}
+
+private struct SettingsReadinessRow: View {
+    let title: String
+    let value: String
+    let isReady: Bool
+
+    private var accent: Color {
+        Color(red: 0.57, green: 0.78, blue: 0.00)
+    }
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: isReady ? "checkmark.circle.fill" : "circle")
+                .foregroundStyle(isReady ? accent : Color.secondary.opacity(0.65))
+                .frame(width: 22)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.primary)
+
+                Text(value)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            Spacer()
+        }
+        .frame(minHeight: 44)
     }
 }
 

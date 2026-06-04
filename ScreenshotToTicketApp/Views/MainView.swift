@@ -6,136 +6,58 @@ struct MainView: View {
     @EnvironmentObject private var settings: SettingsStore
     @StateObject private var vm = MainViewModel()
 
+    private let appAccent = Color(red: 0.57, green: 0.78, blue: 0.00)
+
     var body: some View {
-        VStack(spacing: 0) {
-            header
+        NavigationStack {
+            ZStack {
+                Color(.systemGroupedBackground)
+                    .ignoresSafeArea()
 
-            NavigationStack {
-                Form {
-                    Section("Media") {
-                        PhotosPicker(
-                            selection: $vm.selectedItems,
-                            maxSelectionCount: 3,
-                            matching: .any(of: [.images, .videos])
-                        ) {
-                            Text("Select up to 3 images or videos")
+                ScrollView {
+                    VStack(spacing: 16) {
+                        header
+                        capturePanel
+
+                        if !settings.isConfigured {
+                            readinessPanel
+                        } else if settings.jiraProfiles.count > 1 {
+                            profileSwitcherPanel
                         }
 
-                        if vm.isLoadingMedia {
-                            ProgressView("Loading selected media...")
-                        } else {
-                            Text("Selected: \(vm.mediaItems.count)")
-                                .foregroundStyle(.secondary)
+                        instructionsPanel
+
+                        if !vm.mediaItems.isEmpty {
+                            markupPanel
                         }
-                    }
-
-                    if !vm.mediaItems.isEmpty {
-                        Section("Highlight (Optional)") {
-                            Toggle("Enable markups on screenshots", isOn: $vm.enableMarkup)
-
-                            if vm.enableMarkup {
-                                Text("Draw colored circles around specific areas that you want to report")
-                                    .font(.footnote)
-                                    .foregroundStyle(.secondary)
-
-                                markupColorPalette
-
-                                ForEach(vm.mediaItems) { media in
-                                    VStack(alignment: .leading, spacing: 8) {
-                                        Text(media.fileName)
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-
-                                        ZoomableAnnotationCanvasView(
-                                            image: media.previewImage,
-                                            marks: vm.marksByMediaID[media.id] ?? [],
-                                            interactive: media.isImage && vm.isMarkupDrawingMode,
-                                            opacity: vm.markupOpacity
-                                        ) { point, isStart in
-                                            vm.addFreehandPoint(mediaID: media.id, normalizedPoint: point, beginStroke: isStart)
-                                        }
-
-                                        if media.isImage {
-                                            HStack {
-                                                Button("Undo") { vm.undoMark(mediaID: media.id) }
-                                                Button("Clear") { vm.clearMarks(mediaID: media.id) }
-                                            }
-                                            .buttonStyle(.borderless)
-                                            .font(.footnote)
-                                        } else {
-                                            Text("Markup is available for images only.")
-                                                .font(.footnote)
-                                                .foregroundStyle(.secondary)
-                                        }
-                                    }
-                                    .listRowInsets(EdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 8))
-                                }
-                            }
-                        }
-                    }
-
-                    Section("Hints / Instructions") {
-                        TextEditor(text: $vm.hintText)
-                            .frame(minHeight: 120)
-                    }
-
-                    Section("Submit") {
-                        if settings.jiraProfiles.isEmpty {
-                            Text("No Jira profile selected.")
-                                .foregroundStyle(.secondary)
-                        } else {
-                            Picker("Jira Profile", selection: activeJiraProfileSelection) {
-                                ForEach(settings.jiraProfiles) { profile in
-                                    Text("\(profile.name) (\(profile.projectKey))")
-                                        .tag(profile.id)
-                                }
-                            }
-                            .pickerStyle(.menu)
-                        }
-
-                        Button {
-                            Task { await vm.submit(settings: settings) }
-                        } label: {
-                            if vm.isSubmitting {
-                                ProgressView()
-                            } else {
-                                Text("Create Jira Bug")
-                            }
-                        }
-                        .disabled(vm.isSubmitting)
 
                         if !vm.status.isEmpty {
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text(vm.status)
-                                    .font(.footnote)
-                                    .textSelection(.enabled)
-                                if let issueURL = vm.issueURL {
-                                    Link("Open Jira Issue", destination: issueURL)
-                                        .font(.footnote)
-                                    Text(issueURL.absoluteString)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                        .textSelection(.enabled)
-                                }
-                                Button("Copy Message") {
-                                    UIPasteboard.general.string = vm.status
-                                }
-                                .font(.caption)
-                            }
+                            statusPanel
                         }
                     }
+                    .padding(.horizontal, 18)
+                    .padding(.top, 12)
+                    .padding(.bottom, 112)
                 }
-                .navigationBarTitleDisplayMode(.inline)
-                .overlay(alignment: .bottomTrailing) {
-                    if shouldShowFloatingDrawButton {
-                        floatingDrawButton
-                            .padding(.trailing, 18)
-                            .padding(.bottom, 18)
+
+                if shouldShowFloatingDrawButton {
+                    VStack {
+                        Spacer()
+
+                        HStack {
+                            Spacer()
+                            floatingDrawButton
+                                .padding(.trailing, 18)
+                                .padding(.bottom, 94)
+                        }
                     }
                 }
             }
+            .navigationBarTitleDisplayMode(.inline)
+            .safeAreaInset(edge: .bottom) {
+                submitBar
+            }
         }
-        .background(Color(.systemGroupedBackground))
         .onChange(of: vm.selectedItems) { _ in
             Task { await vm.refreshSelectedMedia() }
         }
@@ -147,37 +69,518 @@ struct MainView: View {
     }
 
     private var header: some View {
-        HStack(spacing: 12) {
-            HStack(spacing: 8) {
-                Text("Screenshot to Jira")
-                    .font(.headline)
-
-                Text(AppBuildInfo.badgeText)
-                    .font(.caption.monospaced())
-                    .foregroundStyle(.secondary)
-            }
-            .lineLimit(1)
-            .minimumScaleFactor(0.75)
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel("Screenshot to Jira, \(AppBuildInfo.badgeText)")
-
-            Spacer(minLength: 12)
-
+        HStack(alignment: .center, spacing: 12) {
             Image("UnicLogo")
                 .resizable()
                 .scaledToFit()
-                .frame(width: 42, height: 42)
+                .frame(width: 36, height: 36)
+                .clipShape(RoundedRectangle(cornerRadius: 7))
                 .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Screenshot to Jira")
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+
+                Text("Capture, annotate, submit")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            .accessibilityElement(children: .combine)
+
+            Spacer(minLength: 8)
+
+            if !AppBuildInfo.badgeText.isEmpty {
+                Text(AppBuildInfo.badgeText)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
         }
-        .frame(height: 56)
-        .padding(.leading, 38)
-        .padding(.trailing, 27)
-        .background(Color(.systemGroupedBackground))
-        .allowsHitTesting(false)
+        .padding(.top, 4)
+        .accessibilityLabel("Screenshot to Jira")
+    }
+
+    private var capturePanel: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Media")
+                        .font(.headline)
+                    Text(mediaSummaryText)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                if !vm.mediaItems.isEmpty {
+                    PhotosPicker(
+                        selection: $vm.selectedItems,
+                        maxSelectionCount: 3,
+                        matching: .any(of: [.images, .videos])
+                    ) {
+                        Label("Replace", systemImage: "arrow.triangle.2.circlepath")
+                            .labelStyle(.iconOnly)
+                            .font(.headline)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .accessibilityLabel("Replace selected media")
+                }
+            }
+
+            if vm.mediaItems.isEmpty {
+                PhotosPicker(
+                    selection: $vm.selectedItems,
+                    maxSelectionCount: 3,
+                    matching: .any(of: [.images, .videos])
+                ) {
+                    emptyCaptureDropZone
+                }
+                .buttonStyle(.plain)
+            } else {
+                selectedMediaStrip
+            }
+        }
+        .panelStyle()
+    }
+
+    private var emptyCaptureDropZone: some View {
+        VStack(spacing: 14) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 22)
+                    .fill(appAccent.opacity(0.12))
+                    .frame(width: 64, height: 64)
+
+                Image(systemName: "plus.viewfinder")
+                    .font(.system(size: 28, weight: .semibold))
+                    .foregroundStyle(appAccent)
+            }
+
+            VStack(spacing: 5) {
+                Text("Select screenshots or videos")
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+
+                Text("Up to 3 attachments")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+
+            if vm.isLoadingMedia {
+                ProgressView("Loading media...")
+                    .font(.footnote)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .frame(minHeight: 238)
+        .background {
+            RoundedRectangle(cornerRadius: 10)
+                .fill(Color(.secondarySystemGroupedBackground))
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 10)
+                .strokeBorder(
+                    Color.secondary.opacity(0.28),
+                    style: StrokeStyle(lineWidth: 1, dash: [3, 4])
+                )
+        }
+        .contentShape(RoundedRectangle(cornerRadius: 10))
+    }
+
+    private var selectedMediaStrip: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 10) {
+                ForEach(Array(vm.mediaItems.enumerated()), id: \.element.id) { index, media in
+                    mediaThumbnail(media, index: index)
+                }
+            }
+            .padding(.vertical, 2)
+        }
+    }
+
+    private func mediaThumbnail(_ media: MainViewModel.LoadedMedia, index: Int) -> some View {
+        ZStack(alignment: .topTrailing) {
+            Image(uiImage: media.previewImage)
+                .resizable()
+                .scaledToFill()
+                .frame(width: 116, height: 148)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(Color.secondary.opacity(0.18), lineWidth: 1)
+                }
+
+            HStack(spacing: 4) {
+                Image(systemName: media.isImage ? "photo" : "video.fill")
+                Text("\(index + 1)")
+            }
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(.primary)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 5)
+            .background(.thinMaterial, in: Capsule())
+            .padding(7)
+        }
+        .accessibilityLabel("\(media.fileName), attachment \(index + 1)")
+    }
+
+    private var readinessPanel: some View {
+        VStack(spacing: 12) {
+            HStack {
+                Label("Readiness", systemImage: settings.isConfigured ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
+                    .font(.headline)
+                    .foregroundStyle(settings.isConfigured ? appAccent : .orange)
+
+                Spacer()
+
+                Text(settings.isConfigured ? "Ready" : "Setup needed")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(settings.isConfigured ? appAccent : .orange)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background((settings.isConfigured ? appAccent : Color.orange).opacity(0.12), in: Capsule())
+            }
+
+            VStack(spacing: 0) {
+                readinessRow(
+                    title: "Jira profile",
+                    value: activeProfileText,
+                    isReady: settings.activeJiraProfile != nil
+                )
+
+                Divider()
+                    .padding(.leading, 32)
+
+                readinessRow(
+                    title: "Credentials",
+                    value: credentialStatusText,
+                    isReady: hasJiraConnection && !settings.openAIKey.isEmpty
+                )
+            }
+
+            if !settings.jiraProfiles.isEmpty {
+                Picker("Jira Profile", selection: activeJiraProfileSelection) {
+                    ForEach(settings.jiraProfiles) { profile in
+                        Text("\(profile.name) (\(profile.projectKey))")
+                            .tag(profile.id)
+                    }
+                }
+                .pickerStyle(.menu)
+            }
+        }
+        .panelStyle()
+    }
+
+    private var profileSwitcherPanel: some View {
+        HStack(spacing: 12) {
+            Label("Jira profile", systemImage: "checkmark.circle.fill")
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(appAccent)
+                .lineLimit(1)
+
+            Spacer(minLength: 8)
+
+            Menu {
+                ForEach(settings.jiraProfiles) { profile in
+                    Button {
+                        settings.activateProfile(id: profile.id)
+                    } label: {
+                        if profile.id == settings.activeJiraProfileID {
+                            Label("\(profile.name) (\(profile.projectKey))", systemImage: "checkmark")
+                        } else {
+                            Text("\(profile.name) (\(profile.projectKey))")
+                        }
+                    }
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    Text(activeProfileText)
+                        .font(.subheadline.weight(.medium))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+                .foregroundStyle(.primary)
+                .padding(.horizontal, 12)
+                .frame(height: 36)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+                .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 8))
+            }
+            .frame(maxWidth: 230)
+        }
+        .panelStyle()
+    }
+
+    private func readinessRow(title: String, value: String, isReady: Bool) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: isReady ? "checkmark.circle.fill" : "circle")
+                .foregroundStyle(isReady ? appAccent : Color.secondary.opacity(0.65))
+                .frame(width: 22)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.subheadline.weight(.medium))
+                Text(value)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            Spacer()
+        }
+        .frame(minHeight: 46)
+    }
+
+    private var instructionsPanel: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Label("Reporter notes", systemImage: "text.alignleft")
+                    .font(.headline)
+
+                Spacer()
+
+                Text("\(vm.hintText.count)")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+
+            TextEditor(text: $vm.hintText)
+                .frame(minHeight: 118)
+                .padding(10)
+                .scrollContentBackground(.hidden)
+                .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 8))
+                .overlay(alignment: .topLeading) {
+                    if vm.hintText.isEmpty {
+                        Text("What happened? What should Jira know?")
+                            .font(.body)
+                            .foregroundStyle(.tertiary)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 18)
+                            .allowsHitTesting(false)
+                    }
+                }
+        }
+        .panelStyle()
     }
 
     private var shouldShowFloatingDrawButton: Bool {
         vm.enableMarkup && vm.mediaItems.contains { $0.isImage }
+    }
+
+    private var markupPanel: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Label("Highlight", systemImage: "pencil.and.outline")
+                    .font(.headline)
+
+                Spacer()
+
+                Toggle("Enable", isOn: $vm.enableMarkup)
+                    .labelsHidden()
+            }
+
+            if vm.enableMarkup {
+                HStack(spacing: 10) {
+                    markupColorPalette
+                }
+
+                Text(vm.isMarkupDrawingMode ? "Drawing mode active" : "Turn on drawing, then mark the screenshot area.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+
+                ForEach(vm.mediaItems) { media in
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack {
+                            Label(media.fileName, systemImage: media.isImage ? "photo" : "video.fill")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+
+                            Spacer()
+
+                            if media.isImage {
+                                Button {
+                                    vm.undoMark(mediaID: media.id)
+                                } label: {
+                                    Image(systemName: "arrow.uturn.backward")
+                                }
+                                .buttonStyle(.borderless)
+                                .accessibilityLabel("Undo markup")
+
+                                Button {
+                                    vm.clearMarks(mediaID: media.id)
+                                } label: {
+                                    Image(systemName: "trash")
+                                }
+                                .buttonStyle(.borderless)
+                                .accessibilityLabel("Clear markup")
+                            }
+                        }
+
+                        ZoomableAnnotationCanvasView(
+                            image: media.previewImage,
+                            marks: vm.marksByMediaID[media.id] ?? [],
+                            interactive: media.isImage && vm.isMarkupDrawingMode,
+                            opacity: vm.markupOpacity
+                        ) { point, isStart in
+                            vm.addFreehandPoint(mediaID: media.id, normalizedPoint: point, beginStroke: isStart)
+                        }
+
+                        if !media.isImage {
+                            Text("Markup is available for images only.")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(12)
+                    .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 8))
+                }
+            } else {
+                Text("Optional marks help the AI focus on the broken area.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .panelStyle()
+    }
+
+    private var statusPanel: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                Image(systemName: vm.issueURL == nil ? "waveform.path.ecg" : "checkmark.circle.fill")
+                    .foregroundStyle(vm.issueURL == nil ? Color.blue : appAccent)
+
+                Text(vm.status)
+                    .font(.subheadline.weight(.medium))
+                    .textSelection(.enabled)
+
+                Spacer()
+            }
+
+            if let issueURL = vm.issueURL {
+                HStack(spacing: 14) {
+                    Link(destination: issueURL) {
+                        Label("Open Jira Issue", systemImage: "arrow.up.right.square")
+                    }
+
+                    Button {
+                        UIPasteboard.general.string = issueURL.absoluteString
+                    } label: {
+                        Label("Copy Link", systemImage: "link")
+                    }
+                    .buttonStyle(.borderless)
+                }
+                .font(.footnote.weight(.medium))
+
+                Text(issueURL.absoluteString)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
+
+            Button {
+                UIPasteboard.general.string = vm.status
+            } label: {
+                Label("Copy Message", systemImage: "doc.on.doc")
+            }
+            .font(.caption)
+            .buttonStyle(.borderless)
+        }
+        .panelStyle()
+    }
+
+    private var submitBar: some View {
+        VStack(spacing: 10) {
+            Divider()
+
+            if shouldShowSubmitProgress {
+                submitProgressRow
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+            }
+
+            Button {
+                Task { await vm.submit(settings: settings) }
+            } label: {
+                HStack(spacing: 10) {
+                    if vm.isSubmitting {
+                        ProgressView()
+                            .tint(.white)
+                    } else {
+                        Image(systemName: "plus.circle.fill")
+                    }
+
+                    Text(submitTitle)
+                        .font(.headline)
+                        .lineLimit(1)
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: 50)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(Color.blue)
+            .disabled(isSubmitDisabled)
+
+            Text(submitHelperText)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
+        }
+        .padding(.horizontal, 18)
+        .padding(.top, 10)
+        .padding(.bottom, 8)
+        .background(.regularMaterial)
+        .animation(.easeInOut(duration: 0.2), value: shouldShowSubmitProgress)
+    }
+
+    private var submitProgressRow: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 9) {
+                if vm.isSubmitting {
+                    ProgressView()
+                        .controlSize(.small)
+                } else {
+                    Image(systemName: vm.issueURL == nil ? "exclamationmark.circle.fill" : "checkmark.circle.fill")
+                        .foregroundStyle(vm.issueURL == nil ? Color.orange : appAccent)
+                }
+
+                Text(submitProgressText)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+
+                Spacer(minLength: 0)
+            }
+
+            if let issueURL = vm.issueURL {
+                HStack(spacing: 12) {
+                    Link(destination: issueURL) {
+                        Label("Open", systemImage: "arrow.up.right.square")
+                    }
+
+                    Button {
+                        UIPasteboard.general.string = issueURL.absoluteString
+                    } label: {
+                        Label("Copy Link", systemImage: "link")
+                    }
+                    .buttonStyle(.borderless)
+                }
+                .font(.caption.weight(.semibold))
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .background(Color(.secondarySystemBackground).opacity(0.82), in: RoundedRectangle(cornerRadius: 8))
     }
 
     private var activeJiraProfileSelection: Binding<String> {
@@ -224,9 +627,89 @@ struct MainView: View {
         }
         .buttonStyle(.borderedProminent)
         .controlSize(.large)
-        .tint(vm.isMarkupDrawingMode ? .accentColor : .secondary)
+        .tint(vm.isMarkupDrawingMode ? appAccent : .secondary)
         .shadow(color: .black.opacity(0.18), radius: 10, x: 0, y: 4)
         .accessibilityHint(vm.isMarkupDrawingMode ? "Drawing mode is active" : "Turns on drawing mode")
+    }
+
+    private var hasJiraConnection: Bool {
+        !settings.workspaceURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !settings.jiraEmail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !settings.jiraApiToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var mediaSummaryText: String {
+        if vm.isLoadingMedia {
+            return "Loading selected media..."
+        }
+        if vm.mediaItems.isEmpty {
+            return "Start with the evidence for the bug."
+        }
+        return "\(vm.mediaItems.count) of 3 attachments selected"
+    }
+
+    private var activeProfileText: String {
+        guard let profile = settings.activeJiraProfile else {
+            return "No Jira profile selected"
+        }
+        return "\(profile.name) - \(profile.projectKey)"
+    }
+
+    private var credentialStatusText: String {
+        switch (hasJiraConnection, !settings.openAIKey.isEmpty) {
+        case (true, true):
+            return "Jira and OpenAI are configured"
+        case (false, true):
+            return "Jira connection is missing"
+        case (true, false):
+            return "OpenAI key is missing"
+        case (false, false):
+            return "Jira and OpenAI settings are missing"
+        }
+    }
+
+    private var isSubmitDisabled: Bool {
+        vm.isSubmitting || vm.isLoadingMedia || vm.mediaItems.isEmpty || !settings.isConfigured
+    }
+
+    private var shouldShowSubmitProgress: Bool {
+        vm.isSubmitting || vm.issueURL != nil || vm.status.hasPrefix("Failed:")
+    }
+
+    private var submitProgressText: String {
+        vm.status.isEmpty ? "Preparing Jira ticket..." : vm.status
+    }
+
+    private var submitTitle: String {
+        vm.isSubmitting ? "Creating Jira Ticket" : "Create Jira Ticket"
+    }
+
+    private var submitHelperText: String {
+        if vm.mediaItems.isEmpty {
+            return "Select screenshots or videos first."
+        }
+        if !settings.isConfigured {
+            return "Complete Jira profile and OpenAI settings in Settings."
+        }
+        return "AI drafts the ticket and uploads the selected media."
+    }
+}
+
+private struct CapturePanelModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .padding(16)
+            .background(Color(.systemBackground), in: RoundedRectangle(cornerRadius: 8))
+            .overlay {
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(Color.secondary.opacity(0.12), lineWidth: 1)
+            }
+    }
+}
+
+private extension View {
+    func panelStyle() -> some View {
+        modifier(CapturePanelModifier())
     }
 }
 
