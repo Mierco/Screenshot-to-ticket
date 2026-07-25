@@ -37,7 +37,14 @@ targets:
       path: ScreenshotToTicketApp/Info.plist
       properties:
         CFBundleDisplayName: ScreenshotToTicket
-        CFBundleShortVersionString: 1.1
+        CFBundleShortVersionString: 1.1.1
+        CFBundleURLTypes:
+          - CFBundleURLName: com.unicapps.s2t.oauth
+            CFBundleURLSchemes:
+              - screenshottoticket
+        AtlassianOAuthClientID: ""
+        AtlassianOAuthRedirectURL: screenshottoticket://oauth/atlassian
+        AtlassianOAuthTokenBrokerURL: ""
         UILaunchScreen: {}
         NSPhotoLibraryUsageDescription: Needed to pick screenshots to attach to Jira issues.
     settings:

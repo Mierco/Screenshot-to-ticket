@@ -4,6 +4,8 @@ import Security
 enum KeychainKey: String {
     case jiraEmail = "jira_email"
     case jiraApiToken = "jira_api_token"
+    case jiraOAuthAccessToken = "jira_oauth_access_token"
+    case jiraOAuthRefreshToken = "jira_oauth_refresh_token"
     case openAIKey = "openai_key"
 }
 
@@ -49,5 +51,17 @@ final class KeychainService {
         }
 
         return value
+    }
+
+    func delete(_ key: KeychainKey) throws {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrAccount as String: key.rawValue
+        ]
+
+        let status = SecItemDelete(query as CFDictionary)
+        guard status == errSecSuccess || status == errSecItemNotFound else {
+            throw KeychainError.unhandled(status: status)
+        }
     }
 }

@@ -5,10 +5,17 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var settings: SettingsStore
 
+    private let onClose: (() -> Void)?
+
     @State private var saveMessage = ""
     @State private var authMessage = ""
     @State private var isTestingAuth = false
+    @State private var isConnectingOAuth = false
     @State private var isAddingProfile = false
+
+    init(onClose: (() -> Void)? = nil) {
+        self.onClose = onClose
+    }
 
     var body: some View {
         NavigationStack {
@@ -22,7 +29,7 @@ struct SettingsView: View {
 
                             Spacer()
 
-                            Text(settings.reasoningEffort.label)
+                            Text("OpenAI")
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(.secondary)
                                 .padding(.horizontal, 10)
@@ -51,8 +58,8 @@ struct SettingsView: View {
 
                             SettingsReadinessRow(
                                 title: "OpenAI",
-                                value: openAISummary,
-                                isReady: !settings.openAIKey.isEmpty && !settings.model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                value: selectedAIProviderSummary,
+                                isReady: settings.isSelectedAIProviderConfigured
                             )
                         }
                     }
@@ -60,15 +67,55 @@ struct SettingsView: View {
                 }
 
                 Section("Jira Connection") {
+                    Picker("Authentication", selection: $settings.jiraAuthMethod) {
+                        ForEach(SettingsStore.JiraAuthMethod.allCases) { method in
+                            Text(method.label).tag(method)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+
                     TextField("Workspace URL", text: $settings.workspaceURL)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
 
-                    TextField("Atlassian Email", text: $settings.jiraEmail)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
+                    if settings.jiraAuthMethod == .apiToken {
+                        TextField("Atlassian Email", text: $settings.jiraEmail)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
 
-                    SecureField("Jira API Token", text: $settings.jiraApiToken)
+                        SecureField("Jira API Token", text: $settings.jiraApiToken)
+                    } else {
+                        if !AtlassianOAuthConfiguration.current.isConfigured {
+                            SettingsMessageView(
+                                message: "Jira Login is not configured in this build yet. Use API Token, or configure the Atlassian OAuth client and token broker first."
+                            )
+                        }
+
+                        if settings.hasJiraAuthentication {
+                            LabeledContent("Status", value: settings.jiraOAuthSiteName.isEmpty ? "Connected" : settings.jiraOAuthSiteName)
+                        }
+
+                        Button {
+                            Task { await connectAtlassianOAuth() }
+                        } label: {
+                            if isConnectingOAuth {
+                                ProgressView()
+                            } else {
+                                Label(
+                                    oauthConnectionButtonTitle,
+                                    systemImage: "person.crop.circle.badge.checkmark"
+                                )
+                            }
+                        }
+                        .disabled(isConnectingOAuth || !AtlassianOAuthConfiguration.current.isConfigured)
+
+                        if settings.hasJiraAuthentication {
+                            Button("Disconnect Jira Cloud", role: .destructive) {
+                                settings.disconnectAtlassianOAuth()
+                                authMessage = "Jira Cloud login disconnected."
+                            }
+                        }
+                    }
 
                     Button {
                         Task { await testJiraAccess() }
@@ -131,11 +178,11 @@ struct SettingsView: View {
                     } else if settings.jiraProfiles.isEmpty {
                         Text("Create a Jira profile before submitting tickets.")
                     } else {
-                        Text("Choose the active profile here. Tap any profile below to edit it.")
+                        Text("Choose the active profile here. Each profile stores its own workspace URL and project.")
                     }
                 }
 
-                Section("OpenAI") {
+                Section {
                     SecureField("OpenAI API Key", text: $settings.openAIKey)
                     TextField("Model ID", text: $settings.model)
                         .textInputAutocapitalization(.never)
@@ -147,6 +194,10 @@ struct SettingsView: View {
                         }
                     }
                     .pickerStyle(.segmented)
+                } header: {
+                    Text("OpenAI")
+                } footer: {
+                    Text("The API key is stored securely in Keychain and is required to create tickets.")
                 }
 
                 Section {
@@ -174,7 +225,7 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    Button("Save Connection and OpenAI Settings") {
+                    Button("Save Settings") {
                         do {
                             try settings.save()
                             saveMessage = "Saved."
@@ -193,7 +244,13 @@ struct SettingsView: View {
             .navigationTitle("Settings")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("Close") { dismiss() }
+                    Button("Close") {
+                        if let onClose {
+                            onClose()
+                        } else {
+                            dismiss()
+                        }
+                    }
                 }
             }
             .fullScreenCover(isPresented: $isAddingProfile) {
@@ -208,9 +265,7 @@ struct SettingsView: View {
     }
 
     private var hasJiraConnection: Bool {
-        !settings.workspaceURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && !settings.jiraEmail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && !settings.jiraApiToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        settings.hasJiraConnection()
     }
 
     private var activeJiraProfileSelection: Binding<String> {
@@ -221,7 +276,7 @@ struct SettingsView: View {
     }
 
     private var jiraConnectionSummary: String {
-        hasJiraConnection ? "Workspace, email, and token set" : "Workspace URL, email, and API token required"
+        settings.jiraConnectionSummary
     }
 
     private var jiraProfileSummary: String {
@@ -231,12 +286,19 @@ struct SettingsView: View {
         return "\(profile.name) - \(profile.projectKey)"
     }
 
-    private var openAISummary: String {
-        if settings.openAIKey.isEmpty {
-            return "API key required"
+    private var selectedAIProviderSummary: String {
+        if !settings.hasOpenAIConfiguration {
+            return "OpenAI API key required"
         }
         let model = settings.model.trimmingCharacters(in: .whitespacesAndNewlines)
-        return model.isEmpty ? "Model ID required" : model
+        return "OpenAI · \(model)"
+    }
+
+    private var oauthConnectionButtonTitle: String {
+        if !AtlassianOAuthConfiguration.current.isConfigured {
+            return "Jira Login Not Configured"
+        }
+        return settings.hasJiraAuthentication ? "Reconnect Jira Cloud" : "Connect Jira Cloud"
     }
 
     private func testJiraAccess() async {
@@ -248,10 +310,8 @@ struct SettingsView: View {
             let activeProjectKey = settings.activeJiraProfile?.projectKey
                 .trimmingCharacters(in: .whitespacesAndNewlines)
                 .uppercased() ?? ""
-            let jira = JiraClient(
+            let jira = try await settings.jiraClient(
                 workspaceURL: settings.workspaceURL,
-                email: settings.jiraEmail,
-                apiToken: settings.jiraApiToken,
                 projectKey: activeProjectKey
             )
 
@@ -267,6 +327,21 @@ struct SettingsView: View {
             authMessage = "Auth OK as \(display). Project \(activeProjectKey) is accessible."
         } catch {
             authMessage = "Access test failed: \(error.localizedDescription)"
+        }
+    }
+
+    private func connectAtlassianOAuth() async {
+        isConnectingOAuth = true
+        authMessage = ""
+        defer { isConnectingOAuth = false }
+
+        do {
+            try await settings.connectAtlassianOAuth()
+            authMessage = settings.jiraOAuthSiteName.isEmpty
+                ? "Jira Cloud connected."
+                : "Jira Cloud connected to \(settings.jiraOAuthSiteName)."
+        } catch {
+            authMessage = "Jira Cloud login failed: \(error.localizedDescription)"
         }
     }
 }
@@ -315,6 +390,11 @@ private struct JiraProfileListRow: View {
                 Text(profile.projectKey)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+                Text(profile.workspaceURL)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
             }
 
             Spacer()
@@ -384,7 +464,11 @@ private struct AddJiraProfileView: View {
 
                     if selectedProjectExistingProfile == nil {
                         Section("Default Fields") {
-                            JiraDefaultFieldsEditor(projectKey: project.key, defaultFieldsJSON: $defaultFieldsJSON)
+                            JiraDefaultFieldsEditor(
+                                workspaceURL: settings.workspaceURL,
+                                projectKey: project.key,
+                                defaultFieldsJSON: $defaultFieldsJSON
+                            )
                         }
                     }
 
@@ -509,6 +593,7 @@ private struct AddJiraProfileView: View {
     private func existingProfile(for project: JiraProject) -> JiraProfile? {
         settings.jiraProfiles.first {
             $0.projectKey.uppercased() == project.key.uppercased()
+                && normalizedWorkspaceURL($0.workspaceURL) == normalizedWorkspaceURL(settings.workspaceURL)
         }
     }
 
@@ -525,7 +610,7 @@ private struct AddJiraProfileView: View {
 
     private func loadProjects() async {
         guard hasJiraConnection else {
-            message = "Fill in Jira Workspace URL, email, and API token first."
+            message = "Fill in Jira Workspace URL and connect Jira first."
             return
         }
 
@@ -534,10 +619,8 @@ private struct AddJiraProfileView: View {
         defer { isLoadingProjects = false }
 
         do {
-            let jira = JiraClient(
+            let jira = try await settings.jiraClient(
                 workspaceURL: settings.workspaceURL,
-                email: settings.jiraEmail,
-                apiToken: settings.jiraApiToken,
                 projectKey: settings.activeJiraProfile?.projectKey ?? ""
             )
             projects = try await jira.fetchAccessibleProjects()
@@ -561,6 +644,7 @@ private struct AddJiraProfileView: View {
             } else {
                 _ = try settings.createProfile(
                     name: profileName,
+                    workspaceURL: settings.workspaceURL,
                     projectKey: project.key,
                     defaultFieldsJSON: defaultFieldsJSON
                 )
@@ -572,9 +656,13 @@ private struct AddJiraProfileView: View {
     }
 
     private var hasJiraConnection: Bool {
-        !settings.workspaceURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && !settings.jiraEmail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && !settings.jiraApiToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        settings.hasJiraConnection()
+    }
+
+    private func normalizedWorkspaceURL(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            .lowercased()
     }
 
     private struct ProjectRow: Identifiable {
@@ -591,6 +679,7 @@ private struct JiraProfileDetailView: View {
     let profileID: String
 
     @State private var profileName = ""
+    @State private var workspaceURL = ""
     @State private var projectKey = ""
     @State private var defaultFieldsJSON = "{}"
     @State private var message = ""
@@ -603,6 +692,10 @@ private struct JiraProfileDetailView: View {
                 Section("Profile") {
                     TextField("Profile Name", text: $profileName)
                         .textInputAutocapitalization(.words)
+                        .autocorrectionDisabled()
+
+                    TextField("Workspace URL", text: $workspaceURL)
+                        .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                 }
 
@@ -617,7 +710,11 @@ private struct JiraProfileDetailView: View {
                 }
 
                 Section("Default Fields") {
-                    JiraDefaultFieldsEditor(projectKey: projectKey, defaultFieldsJSON: $defaultFieldsJSON)
+                    JiraDefaultFieldsEditor(
+                        workspaceURL: workspaceURL,
+                        projectKey: projectKey,
+                        defaultFieldsJSON: $defaultFieldsJSON
+                    )
                 }
 
                 Section {
@@ -684,6 +781,7 @@ private struct JiraProfileDetailView: View {
         .fullScreenCover(isPresented: $isSelectingProject) {
             JiraProjectPickerView(
                 title: "Change Project",
+                workspaceURL: workspaceURL,
                 currentProjectKey: projectKey,
                 showsExistingProfileBadges: true
             ) { project in
@@ -701,6 +799,7 @@ private struct JiraProfileDetailView: View {
     private var canSave: Bool {
         profile != nil
             && !profileName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !workspaceURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && !projectKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && defaultFieldsValidationMessage == nil
     }
@@ -717,6 +816,7 @@ private struct JiraProfileDetailView: View {
     private func loadProfileDraft() {
         guard let profile else { return }
         profileName = profile.name
+        workspaceURL = profile.workspaceURL
         projectKey = profile.projectKey
         defaultFieldsJSON = profile.defaultFieldsJSON
         message = ""
@@ -725,6 +825,7 @@ private struct JiraProfileDetailView: View {
     private func saveProfile() {
         guard var updatedProfile = profile else { return }
         updatedProfile.name = profileName
+        updatedProfile.workspaceURL = workspaceURL
         updatedProfile.projectKey = projectKey
         updatedProfile.defaultFieldsJSON = defaultFieldsJSON
 
@@ -760,6 +861,7 @@ private struct JiraProjectPickerView: View {
     @EnvironmentObject private var settings: SettingsStore
 
     let title: String
+    let workspaceURL: String
     let currentProjectKey: String
     let showsExistingProfileBadges: Bool
     let onSelect: (JiraProject) -> Void
@@ -874,12 +976,13 @@ private struct JiraProjectPickerView: View {
     private func existingProfile(for project: JiraProject) -> JiraProfile? {
         settings.jiraProfiles.first {
             $0.projectKey.uppercased() == project.key.uppercased()
+                && normalizedWorkspaceURL($0.workspaceURL) == normalizedWorkspaceURL(workspaceURL)
         }
     }
 
     private func loadProjects() async {
         guard hasJiraConnection else {
-            message = "Fill in Jira Workspace URL, email, and API token first."
+            message = "Fill in Jira Workspace URL and connect Jira first."
             return
         }
 
@@ -888,10 +991,8 @@ private struct JiraProjectPickerView: View {
         defer { isLoadingProjects = false }
 
         do {
-            let jira = JiraClient(
-                workspaceURL: settings.workspaceURL,
-                email: settings.jiraEmail,
-                apiToken: settings.jiraApiToken,
+            let jira = try await settings.jiraClient(
+                workspaceURL: workspaceURL,
                 projectKey: currentProjectKey.isEmpty ? (settings.activeJiraProfile?.projectKey ?? "") : currentProjectKey
             )
             projects = try await jira.fetchAccessibleProjects()
@@ -904,9 +1005,13 @@ private struct JiraProjectPickerView: View {
     }
 
     private var hasJiraConnection: Bool {
-        !settings.workspaceURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && !settings.jiraEmail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && !settings.jiraApiToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        settings.hasJiraConnection(workspaceURL: workspaceURL)
+    }
+
+    private func normalizedWorkspaceURL(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            .lowercased()
     }
 
     private struct ProjectRow: Identifiable {
@@ -918,6 +1023,7 @@ private struct JiraProjectPickerView: View {
 
 private struct JiraDefaultFieldsEditor: View {
     @EnvironmentObject private var settings: SettingsStore
+    let workspaceURL: String
     let projectKey: String
     @Binding var defaultFieldsJSON: String
 
@@ -1757,16 +1863,14 @@ private struct JiraDefaultFieldsEditor: View {
     }
 
     private var hasJiraConnection: Bool {
-        !settings.workspaceURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && !settings.jiraEmail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && !settings.jiraApiToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        settings.hasJiraConnection(workspaceURL: workspaceURL)
     }
 
     private func loadFieldTemplate() async {
         let normalizedProjectKey = projectKey.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         guard !normalizedProjectKey.isEmpty else { return }
         guard hasJiraConnection else {
-            fieldTemplateMessage = "Fill in Jira Workspace URL, email, and API token first."
+            fieldTemplateMessage = "Fill in Jira Workspace URL and connect Jira first."
             return
         }
 
@@ -1784,10 +1888,8 @@ private struct JiraDefaultFieldsEditor: View {
                 fieldTemplateJSON = ""
             }
 
-            let jira = JiraClient(
-                workspaceURL: settings.workspaceURL,
-                email: settings.jiraEmail,
-                apiToken: settings.jiraApiToken,
+            let jira = try await settings.jiraClient(
+                workspaceURL: workspaceURL,
                 projectKey: normalizedProjectKey
             )
 
@@ -1831,10 +1933,8 @@ private struct JiraDefaultFieldsEditor: View {
         defer { isLoadingFieldTemplate = false }
 
         do {
-            let jira = JiraClient(
-                workspaceURL: settings.workspaceURL,
-                email: settings.jiraEmail,
-                apiToken: settings.jiraApiToken,
+            let jira = try await settings.jiraClient(
+                workspaceURL: workspaceURL,
                 projectKey: normalizedProjectKey
             )
             if projectVersions.isEmpty {

@@ -2,6 +2,22 @@ import Foundation
 
 @MainActor
 final class SettingsStore: ObservableObject {
+    enum JiraAuthMethod: String, CaseIterable, Identifiable {
+        case apiToken
+        case atlassianOAuth
+
+        var id: String { rawValue }
+
+        var label: String {
+            switch self {
+            case .apiToken:
+                return "API Token"
+            case .atlassianOAuth:
+                return "Jira Login"
+            }
+        }
+    }
+
     enum ReasoningEffort: String, CaseIterable, Identifiable {
         case medium
         case high
@@ -14,8 +30,14 @@ final class SettingsStore: ObservableObject {
         }
     }
 
+    @Published var jiraAuthMethod: JiraAuthMethod
     @Published var jiraEmail: String
     @Published var jiraApiToken: String
+    @Published private(set) var jiraOAuthAccessToken: String
+    @Published private(set) var jiraOAuthRefreshToken: String
+    @Published private(set) var jiraOAuthCloudID: String
+    @Published private(set) var jiraOAuthSiteName: String
+    @Published private(set) var jiraOAuthTokenExpiresAt: Date?
     @Published var openAIKey: String
     @Published var workspaceURL: String
     @Published var jiraProfiles: [JiraProfile]
@@ -25,6 +47,10 @@ final class SettingsStore: ObservableObject {
     @Published var ticketPrompt: String
 
     private enum DefaultsKey {
+        static let jiraAuthMethod = "jiraAuthMethod"
+        static let jiraOAuthCloudID = "jiraOAuthCloudID"
+        static let jiraOAuthSiteName = "jiraOAuthSiteName"
+        static let jiraOAuthTokenExpiresAt = "jiraOAuthTokenExpiresAt"
         static let workspaceURL = "workspaceURL"
         static let legacyProjectKey = "projectKey"
         static let jiraProfiles = "jiraProfiles"
@@ -43,12 +69,19 @@ final class SettingsStore: ObservableObject {
     private let defaults = UserDefaults.standard
 
     init() {
+        jiraAuthMethod = defaults.string(forKey: DefaultsKey.jiraAuthMethod).flatMap(JiraAuthMethod.init(rawValue:)) ?? .apiToken
         jiraEmail = KeychainService.shared.read(.jiraEmail)
         jiraApiToken = KeychainService.shared.read(.jiraApiToken)
+        jiraOAuthAccessToken = KeychainService.shared.read(.jiraOAuthAccessToken)
+        jiraOAuthRefreshToken = KeychainService.shared.read(.jiraOAuthRefreshToken)
+        jiraOAuthCloudID = defaults.string(forKey: DefaultsKey.jiraOAuthCloudID) ?? ""
+        jiraOAuthSiteName = defaults.string(forKey: DefaultsKey.jiraOAuthSiteName) ?? ""
+        jiraOAuthTokenExpiresAt = defaults.object(forKey: DefaultsKey.jiraOAuthTokenExpiresAt) as? Date
         openAIKey = KeychainService.shared.read(.openAIKey)
 
         let storedWorkspaceURL = defaults.string(forKey: DefaultsKey.workspaceURL)
-        workspaceURL = storedWorkspaceURL ?? ""
+        let legacyWorkspaceURL = storedWorkspaceURL ?? ""
+        workspaceURL = legacyWorkspaceURL
         model = defaults.string(forKey: DefaultsKey.openAIModel) ?? "gpt-5.5"
         reasoningEffort = defaults.string(forKey: DefaultsKey.reasoningEffort).flatMap(ReasoningEffort.init(rawValue:)) ?? .medium
         ticketPrompt = defaults.string(forKey: DefaultsKey.ticketPrompt).flatMap {
@@ -69,7 +102,8 @@ final class SettingsStore: ObservableObject {
             ? [JiraProfile(name: legacyProjectKey.uppercased(), projectKey: legacyProjectKey)]
             : storedProfiles
         let loadedProfiles = Self.normalizedProfiles(
-            sourceProfiles
+            sourceProfiles,
+            legacyWorkspaceURL: legacyWorkspaceURL
         )
         let loadedActiveProfileID = Self.validActiveProfileID(
             defaults.string(forKey: DefaultsKey.activeJiraProfileID),
@@ -77,6 +111,7 @@ final class SettingsStore: ObservableObject {
         )
         jiraProfiles = loadedProfiles
         activeJiraProfileID = loadedActiveProfileID
+        workspaceURL = activeJiraProfile?.workspaceURL.isEmpty == false ? activeJiraProfile?.workspaceURL ?? legacyWorkspaceURL : legacyWorkspaceURL
 
         if didRemoveGeneratedLegacyProfile || (!hasStoredProfilesData && !jiraProfiles.isEmpty),
            let encodedProfiles = try? JSONEncoder().encode(jiraProfiles) {
@@ -96,16 +131,28 @@ final class SettingsStore: ObservableObject {
             )
         }
 
-        let normalizedProfiles = try Self.validatedProfiles(jiraProfiles)
+        var sourceProfiles = jiraProfiles
+        if let index = sourceProfiles.firstIndex(where: { $0.id == activeJiraProfileID }) {
+            sourceProfiles[index].workspaceURL = workspaceURL
+        }
+
+        let normalizedProfiles = try Self.validatedProfiles(sourceProfiles)
         jiraProfiles = normalizedProfiles
         activeJiraProfileID = Self.validActiveProfileID(activeJiraProfileID, profiles: normalizedProfiles)
+        workspaceURL = activeJiraProfile?.workspaceURL ?? workspaceURL
         ticketPrompt = trimmedPrompt
 
         try KeychainService.shared.save(jiraEmail, for: .jiraEmail)
         try KeychainService.shared.save(jiraApiToken, for: .jiraApiToken)
+        try KeychainService.shared.save(jiraOAuthAccessToken, for: .jiraOAuthAccessToken)
+        try KeychainService.shared.save(jiraOAuthRefreshToken, for: .jiraOAuthRefreshToken)
         try KeychainService.shared.save(openAIKey, for: .openAIKey)
 
         let encodedProfiles = try JSONEncoder().encode(jiraProfiles)
+        defaults.set(jiraAuthMethod.rawValue, forKey: DefaultsKey.jiraAuthMethod)
+        defaults.set(jiraOAuthCloudID, forKey: DefaultsKey.jiraOAuthCloudID)
+        defaults.set(jiraOAuthSiteName, forKey: DefaultsKey.jiraOAuthSiteName)
+        defaults.set(jiraOAuthTokenExpiresAt, forKey: DefaultsKey.jiraOAuthTokenExpiresAt)
         defaults.set(workspaceURL, forKey: DefaultsKey.workspaceURL)
         defaults.set(activeJiraProfile?.projectKey ?? "", forKey: DefaultsKey.legacyProjectKey)
         defaults.set(encodedProfiles, forKey: DefaultsKey.jiraProfiles)
@@ -116,10 +163,129 @@ final class SettingsStore: ObservableObject {
     }
 
     var isConfigured: Bool {
-        !jiraEmail.isEmpty
-            && !jiraApiToken.isEmpty
-            && !openAIKey.isEmpty
+        hasJiraAuthentication
+            && hasOpenAIConfiguration
+            && (activeJiraProfile?.workspaceURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
             && (activeJiraProfile?.projectKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
+    }
+
+    var isSelectedAIProviderConfigured: Bool {
+        hasOpenAIConfiguration
+    }
+
+    var hasOpenAIConfiguration: Bool {
+        !openAIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var selectedAIModelName: String {
+        let modelID = model.trimmingCharacters(in: .whitespacesAndNewlines)
+        return modelID.isEmpty ? "OpenAI" : modelID
+    }
+
+    var hasJiraAuthentication: Bool {
+        switch jiraAuthMethod {
+        case .apiToken:
+            return !jiraEmail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                && !jiraApiToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        case .atlassianOAuth:
+            return !jiraOAuthAccessToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                && !jiraOAuthCloudID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+    }
+
+    var jiraConnectionSummary: String {
+        switch jiraAuthMethod {
+        case .apiToken:
+            return hasJiraAuthentication ? "Workspace, email, and token set" : "Workspace URL, email, and API token required"
+        case .atlassianOAuth:
+            if hasJiraAuthentication {
+                return jiraOAuthSiteName.isEmpty ? "Jira Cloud connected" : "Connected to \(jiraOAuthSiteName)"
+            }
+            return AtlassianOAuthConfiguration.current.isConfigured
+                ? "Connect with Atlassian to authorize Jira Cloud"
+                : "Atlassian OAuth is not configured for this build"
+        }
+    }
+
+    func hasJiraConnection(workspaceURL: String? = nil) -> Bool {
+        let candidateWorkspaceURL = (workspaceURL ?? self.workspaceURL).trimmingCharacters(in: .whitespacesAndNewlines)
+        return !candidateWorkspaceURL.isEmpty && hasJiraAuthentication
+    }
+
+    func jiraClient(workspaceURL: String, projectKey: String) async throws -> JiraClient {
+        switch jiraAuthMethod {
+        case .apiToken:
+            return JiraClient(
+                workspaceURL: workspaceURL,
+                email: jiraEmail,
+                apiToken: jiraApiToken,
+                projectKey: projectKey
+            )
+        case .atlassianOAuth:
+            try await refreshJiraOAuthTokenIfNeeded()
+            return JiraClient(
+                workspaceURL: workspaceURL,
+                auth: .bearer(accessToken: jiraOAuthAccessToken, cloudID: jiraOAuthCloudID),
+                projectKey: projectKey
+            )
+        }
+    }
+
+    func connectAtlassianOAuth() async throws {
+        let connection = try await AtlassianOAuthService().authorize(preferredWorkspaceURL: workspaceURL)
+        jiraAuthMethod = .atlassianOAuth
+        jiraOAuthAccessToken = connection.tokens.accessToken
+        jiraOAuthRefreshToken = connection.tokens.refreshToken
+        jiraOAuthTokenExpiresAt = connection.tokens.expiresAt
+        jiraOAuthCloudID = connection.cloudID
+        jiraOAuthSiteName = connection.siteName
+        workspaceURL = connection.workspaceURL
+        if let activeProfile = activeJiraProfile {
+            updateActiveJiraProfile { profile in
+                if profile.id == activeProfile.id {
+                    profile.workspaceURL = connection.workspaceURL
+                }
+            }
+        }
+        try save()
+    }
+
+    func disconnectAtlassianOAuth() {
+        jiraOAuthAccessToken = ""
+        jiraOAuthRefreshToken = ""
+        jiraOAuthCloudID = ""
+        jiraOAuthSiteName = ""
+        jiraOAuthTokenExpiresAt = nil
+        try? KeychainService.shared.delete(.jiraOAuthAccessToken)
+        try? KeychainService.shared.delete(.jiraOAuthRefreshToken)
+        defaults.removeObject(forKey: DefaultsKey.jiraOAuthCloudID)
+        defaults.removeObject(forKey: DefaultsKey.jiraOAuthSiteName)
+        defaults.removeObject(forKey: DefaultsKey.jiraOAuthTokenExpiresAt)
+    }
+
+    func refreshJiraOAuthTokenIfNeeded(force: Bool = false) async throws {
+        guard jiraAuthMethod == .atlassianOAuth else { return }
+        let refreshToken = jiraOAuthRefreshToken.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !refreshToken.isEmpty else { return }
+
+        let refreshThreshold = Date().addingTimeInterval(120)
+        if !force,
+           let expiresAt = jiraOAuthTokenExpiresAt,
+           expiresAt > refreshThreshold,
+           !jiraOAuthAccessToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return
+        }
+
+        let tokens = try await AtlassianOAuthService().refresh(refreshToken: refreshToken)
+        jiraOAuthAccessToken = tokens.accessToken
+        if !tokens.refreshToken.isEmpty {
+            jiraOAuthRefreshToken = tokens.refreshToken
+        }
+        jiraOAuthTokenExpiresAt = tokens.expiresAt
+        try KeychainService.shared.save(jiraOAuthAccessToken, for: .jiraOAuthAccessToken)
+        try KeychainService.shared.save(jiraOAuthRefreshToken, for: .jiraOAuthRefreshToken)
+        defaults.set(jiraOAuthTokenExpiresAt, forKey: DefaultsKey.jiraOAuthTokenExpiresAt)
     }
 
     var activeJiraProfile: JiraProfile? {
@@ -129,6 +295,7 @@ final class SettingsStore: ObservableObject {
     func activateProfile(id: String) {
         guard jiraProfiles.contains(where: { $0.id == id }) else { return }
         activeJiraProfileID = id
+        workspaceURL = activeJiraProfile?.workspaceURL ?? workspaceURL
         persistActiveProfileSelection()
     }
 
@@ -138,8 +305,16 @@ final class SettingsStore: ObservableObject {
     }
 
     @discardableResult
-    func createProfile(name: String, projectKey: String, defaultFieldsJSON: String = "{}") throws -> JiraProfile {
+    func createProfile(name: String, workspaceURL: String? = nil, projectKey: String, defaultFieldsJSON: String = "{}") throws -> JiraProfile {
+        let workspaceURL = (workspaceURL ?? self.workspaceURL).trimmingCharacters(in: .whitespacesAndNewlines)
         let projectKey = projectKey.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard !workspaceURL.isEmpty else {
+            throw NSError(
+                domain: "SettingsStore",
+                code: 9,
+                userInfo: [NSLocalizedDescriptionKey: "Jira profile needs a workspace URL."]
+            )
+        }
         guard !projectKey.isEmpty else {
             throw NSError(
                 domain: "SettingsStore",
@@ -148,27 +323,34 @@ final class SettingsStore: ObservableObject {
             )
         }
 
-        if let index = jiraProfiles.firstIndex(where: { $0.projectKey.uppercased() == projectKey }) {
+        if let index = jiraProfiles.firstIndex(where: {
+            $0.projectKey.uppercased() == projectKey && Self.normalizedWorkspaceURL($0.workspaceURL) == Self.normalizedWorkspaceURL(workspaceURL)
+        }) {
             activeJiraProfileID = jiraProfiles[index].id
+            self.workspaceURL = jiraProfiles[index].workspaceURL
             persistActiveProfileSelection()
             return jiraProfiles[index]
         }
 
         let originalProfiles = jiraProfiles
         let originalActiveProfileID = activeJiraProfileID
+        let originalWorkspaceURL = self.workspaceURL
         let profileName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let profile = JiraProfile(
             name: profileName.isEmpty ? projectKey : profileName,
+            workspaceURL: workspaceURL,
             projectKey: projectKey,
             defaultFieldsJSON: defaultFieldsJSON
         )
         jiraProfiles.append(profile)
         activeJiraProfileID = profile.id
+        self.workspaceURL = profile.workspaceURL
         do {
             try persistProfiles()
         } catch {
             jiraProfiles = originalProfiles
             activeJiraProfileID = originalActiveProfileID
+            self.workspaceURL = originalWorkspaceURL
             throw error
         }
         return activeJiraProfile ?? profile
@@ -178,6 +360,7 @@ final class SettingsStore: ObservableObject {
     func createProfile(from project: JiraProject, name: String? = nil) throws -> JiraProfile {
         try createProfile(
             name: name ?? project.name,
+            workspaceURL: workspaceURL,
             projectKey: project.key
         )
     }
@@ -196,6 +379,7 @@ final class SettingsStore: ObservableObject {
         let originalActiveProfileID = activeJiraProfileID
         let profile = JiraProfile(
             name: duplicateProfileName(for: sourceProfile.name),
+            workspaceURL: sourceProfile.workspaceURL,
             projectKey: sourceProfile.projectKey,
             defaultFieldsJSON: sourceProfile.defaultFieldsJSON
         )
@@ -216,12 +400,17 @@ final class SettingsStore: ObservableObject {
         guard let index = jiraProfiles.firstIndex(where: { $0.id == profile.id }) else { return }
         let originalProfiles = jiraProfiles
         let originalActiveProfileID = activeJiraProfileID
+        let originalWorkspaceURL = workspaceURL
         jiraProfiles[index] = profile
         do {
             try persistProfiles()
+            if profile.id == activeJiraProfileID {
+                workspaceURL = activeJiraProfile?.workspaceURL ?? workspaceURL
+            }
         } catch {
             jiraProfiles = originalProfiles
             activeJiraProfileID = originalActiveProfileID
+            workspaceURL = originalWorkspaceURL
             throw error
         }
     }
@@ -288,6 +477,14 @@ final class SettingsStore: ObservableObject {
     private static func validatedProfiles(_ profiles: [JiraProfile]) throws -> [JiraProfile] {
         let normalized = normalizedProfiles(profiles)
         for profile in normalized {
+            guard !profile.workspaceURL.isEmpty else {
+                throw NSError(
+                    domain: "SettingsStore",
+                    code: 10,
+                    userInfo: [NSLocalizedDescriptionKey: "Jira profile \"\(profile.name)\" needs a workspace URL."]
+                )
+            }
+
             guard !profile.projectKey.isEmpty else {
                 throw NSError(
                     domain: "SettingsStore",
@@ -332,8 +529,9 @@ final class SettingsStore: ObservableObject {
         return []
     }
 
-    private static func normalizedProfiles(_ profiles: [JiraProfile]) -> [JiraProfile] {
+    private static func normalizedProfiles(_ profiles: [JiraProfile], legacyWorkspaceURL: String = "") -> [JiraProfile] {
         var seenIDs: Set<String> = []
+        let fallbackWorkspaceURL = legacyWorkspaceURL.trimmingCharacters(in: .whitespacesAndNewlines)
 
         return profiles.map { profile in
             var normalized = profile
@@ -348,6 +546,10 @@ final class SettingsStore: ObservableObject {
             normalized.projectKey = normalized.projectKey
                 .trimmingCharacters(in: .whitespacesAndNewlines)
                 .uppercased()
+            normalized.workspaceURL = normalized.workspaceURL.trimmingCharacters(in: .whitespacesAndNewlines)
+            if normalized.workspaceURL.isEmpty {
+                normalized.workspaceURL = fallbackWorkspaceURL
+            }
             normalized.name = normalized.name.trimmingCharacters(in: .whitespacesAndNewlines)
             if normalized.name.isEmpty {
                 normalized.name = normalized.projectKey.isEmpty ? "Jira Profile" : normalized.projectKey
@@ -372,10 +574,18 @@ final class SettingsStore: ObservableObject {
         let normalizedProfiles = try Self.validatedProfiles(jiraProfiles)
         jiraProfiles = normalizedProfiles
         activeJiraProfileID = Self.validActiveProfileID(activeJiraProfileID, profiles: normalizedProfiles)
+        workspaceURL = activeJiraProfile?.workspaceURL ?? workspaceURL
 
         let encodedProfiles = try JSONEncoder().encode(jiraProfiles)
         defaults.set(encodedProfiles, forKey: DefaultsKey.jiraProfiles)
+        defaults.set(workspaceURL, forKey: DefaultsKey.workspaceURL)
         persistActiveProfileSelection()
+    }
+
+    private static func normalizedWorkspaceURL(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            .lowercased()
     }
 
     private func persistActiveProfileSelection() {

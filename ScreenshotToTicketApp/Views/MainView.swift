@@ -3,10 +3,22 @@ import SwiftUI
 import UIKit
 
 struct MainView: View {
+    private enum FocusedField: Hashable {
+        case reporterNotes
+        case draftSummary
+        case draftDescription
+    }
+
     @EnvironmentObject private var settings: SettingsStore
     @StateObject private var vm = MainViewModel()
+    @FocusState private var focusedField: FocusedField?
 
+    private let onOpenSettings: () -> Void
     private let appAccent = Color(red: 0.57, green: 0.78, blue: 0.00)
+
+    init(onOpenSettings: @escaping () -> Void = {}) {
+        self.onOpenSettings = onOpenSettings
+    }
 
     var body: some View {
         NavigationStack {
@@ -27,6 +39,10 @@ struct MainView: View {
 
                         instructionsPanel
 
+                        if vm.hasDraft {
+                            draftPanel
+                        }
+
                         if !vm.mediaItems.isEmpty {
                             markupPanel
                         }
@@ -39,6 +55,7 @@ struct MainView: View {
                     .padding(.top, 12)
                     .padding(.bottom, 112)
                 }
+                .scrollDismissesKeyboard(.interactively)
 
                 if shouldShowFloatingDrawButton {
                     VStack {
@@ -58,7 +75,17 @@ struct MainView: View {
                 submitBar
             }
         }
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") {
+                    focusedField = nil
+                }
+                .fontWeight(.semibold)
+            }
+        }
         .onChange(of: vm.selectedItems) { _ in
+            vm.discardDraft()
             Task { await vm.refreshSelectedMedia() }
         }
         .onChange(of: vm.enableMarkup) { enabled in
@@ -82,23 +109,25 @@ struct MainView: View {
                     .font(.title3.weight(.semibold))
                     .foregroundStyle(.primary)
                     .lineLimit(1)
+                    .minimumScaleFactor(0.86)
 
-                Text("Capture, annotate, submit")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                HStack(spacing: 8) {
+                    Text("Capture, annotate, submit")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+
+                    if !AppBuildInfo.badgeText.isEmpty {
+                        Text(AppBuildInfo.badgeText)
+                            .font(.caption2.monospaced())
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                    }
+                }
             }
             .accessibilityElement(children: .combine)
-
-            Spacer(minLength: 8)
-
-            if !AppBuildInfo.badgeText.isEmpty {
-                Text(AppBuildInfo.badgeText)
-                    .font(.caption.monospaced())
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.top, 4)
         .accessibilityLabel("Screenshot to Jira")
@@ -121,7 +150,8 @@ struct MainView: View {
                     PhotosPicker(
                         selection: $vm.selectedItems,
                         maxSelectionCount: 3,
-                        matching: .any(of: [.images, .videos])
+                        matching: .any(of: [.images, .videos]),
+                        preferredItemEncoding: .current
                     ) {
                         Label("Replace", systemImage: "arrow.triangle.2.circlepath")
                             .labelStyle(.iconOnly)
@@ -137,7 +167,8 @@ struct MainView: View {
                 PhotosPicker(
                     selection: $vm.selectedItems,
                     maxSelectionCount: 3,
-                    matching: .any(of: [.images, .videos])
+                    matching: .any(of: [.images, .videos]),
+                    preferredItemEncoding: .current
                 ) {
                     emptyCaptureDropZone
                 }
@@ -238,12 +269,7 @@ struct MainView: View {
 
                 Spacer()
 
-                Text(settings.isConfigured ? "Ready" : "Setup needed")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(settings.isConfigured ? appAccent : .orange)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .background((settings.isConfigured ? appAccent : Color.orange).opacity(0.12), in: Capsule())
+                readinessStatusBadge
             }
 
             VStack(spacing: 0) {
@@ -259,7 +285,7 @@ struct MainView: View {
                 readinessRow(
                     title: "Credentials",
                     value: credentialStatusText,
-                    isReady: hasJiraConnection && !settings.openAIKey.isEmpty
+                    isReady: hasJiraConnection && settings.isSelectedAIProviderConfigured
                 )
             }
 
@@ -274,6 +300,22 @@ struct MainView: View {
             }
         }
         .panelStyle()
+    }
+
+    private var readinessStatusBadge: some View {
+        Group {
+            if settings.isConfigured {
+                Text("Ready")
+                    .readinessBadge(foreground: appAccent, background: appAccent.opacity(0.12))
+            } else {
+                Button(action: onOpenSettings) {
+                    Text("Setup needed")
+                        .readinessBadge(foreground: .orange, background: Color.orange.opacity(0.12))
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint("Opens Settings")
+            }
+        }
     }
 
     private var profileSwitcherPanel: some View {
@@ -353,6 +395,7 @@ struct MainView: View {
             }
 
             TextEditor(text: $vm.hintText)
+                .focused($focusedField, equals: .reporterNotes)
                 .frame(minHeight: 118)
                 .padding(10)
                 .scrollContentBackground(.hidden)
@@ -367,6 +410,63 @@ struct MainView: View {
                             .allowsHitTesting(false)
                     }
                 }
+        }
+        .panelStyle()
+    }
+
+    private var draftPanel: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Label("Ticket preview", systemImage: "doc.text.magnifyingglass")
+                    .font(.headline)
+
+                Spacer()
+
+                Text("Editable")
+                    .readinessBadge(foreground: appAccent, background: appAccent.opacity(0.12))
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Summary")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+
+                TextField("Ticket summary", text: $vm.draftSummary, axis: .vertical)
+                    .focused($focusedField, equals: .draftSummary)
+                    .textFieldStyle(.roundedBorder)
+                    .lineLimit(1...3)
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Description")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+
+                TextEditor(text: $vm.draftDescription)
+                    .focused($focusedField, equals: .draftDescription)
+                    .frame(minHeight: 240)
+                    .padding(10)
+                    .scrollContentBackground(.hidden)
+                    .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 8))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(Color.secondary.opacity(0.16), lineWidth: 1)
+                    }
+            }
+
+            Button {
+                focusedField = nil
+                Task { await vm.prepareDraft(settings: settings) }
+            } label: {
+                Label("Update draft from reporter notes", systemImage: "arrow.clockwise")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .disabled(vm.isSubmitting)
+
+            Text("Edit the ticket directly, or change the reporter notes and update the draft with AI.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
         }
         .panelStyle()
     }
@@ -507,19 +607,31 @@ struct MainView: View {
             }
 
             Button {
-                Task { await vm.submit(settings: settings) }
+                focusedField = nil
+                if vm.hasDraft {
+                    Task { await vm.submit(settings: settings) }
+                } else {
+                    Task { await vm.prepareDraft(settings: settings) }
+                }
             } label: {
-                HStack(spacing: 10) {
+                HStack(spacing: 7) {
                     if vm.isSubmitting {
                         ProgressView()
                             .tint(.white)
                     } else {
-                        Image(systemName: "plus.circle.fill")
+                        Image(systemName: vm.hasDraft ? "plus.circle.fill" : "doc.text.magnifyingglass")
                     }
 
-                    Text(submitTitle)
-                        .font(.headline)
-                        .lineLimit(1)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(submitTitle)
+                            .font(.caption.weight(.semibold))
+                            .lineLimit(1)
+
+                        Text(settings.selectedAIModelName)
+                            .font(.caption2)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+                    }
                 }
                 .frame(maxWidth: .infinity)
                 .frame(height: 50)
@@ -633,9 +745,7 @@ struct MainView: View {
     }
 
     private var hasJiraConnection: Bool {
-        !settings.workspaceURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && !settings.jiraEmail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && !settings.jiraApiToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        settings.hasJiraConnection(workspaceURL: settings.activeJiraProfile?.workspaceURL)
     }
 
     private var mediaSummaryText: String {
@@ -656,20 +766,28 @@ struct MainView: View {
     }
 
     private var credentialStatusText: String {
-        switch (hasJiraConnection, !settings.openAIKey.isEmpty) {
+        switch (hasJiraConnection, settings.isSelectedAIProviderConfigured) {
         case (true, true):
             return "Jira and OpenAI are configured"
         case (false, true):
             return "Jira connection is missing"
         case (true, false):
-            return "OpenAI key is missing"
+            return "OpenAI configuration is missing"
         case (false, false):
-            return "Jira and OpenAI settings are missing"
+            return "Jira and AI settings are missing"
         }
     }
 
     private var isSubmitDisabled: Bool {
-        vm.isSubmitting || vm.isLoadingMedia || vm.mediaItems.isEmpty || !settings.isConfigured
+        vm.isSubmitting
+            || vm.isLoadingMedia
+            || vm.mediaItems.isEmpty
+            || !settings.isConfigured
+            || (vm.hasDraft && (
+                vm.draftSummary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    || vm.draftDescription.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    || vm.issueURL != nil
+            ))
     }
 
     private var shouldShowSubmitProgress: Bool {
@@ -681,7 +799,13 @@ struct MainView: View {
     }
 
     private var submitTitle: String {
-        vm.isSubmitting ? "Creating Jira Ticket" : "Create Jira Ticket"
+        if vm.isSubmitting {
+            return vm.isPreparingDraft ? "Drafting..." : "Creating..."
+        }
+        if vm.issueURL != nil {
+            return "Ticket Created"
+        }
+        return vm.hasDraft ? "Create Ticket" : "Review Ticket"
     }
 
     private var submitHelperText: String {
@@ -689,9 +813,12 @@ struct MainView: View {
             return "Select screenshots or videos first."
         }
         if !settings.isConfigured {
-            return "Complete Jira profile and OpenAI settings in Settings."
+            return "Complete the Jira profile and OpenAI settings."
         }
-        return "AI drafts the ticket and uploads the selected media."
+        if vm.hasDraft {
+            return "Review and edit the ticket before creating it in Jira."
+        }
+        return "\(settings.selectedAIModelName) drafts the ticket."
     }
 }
 
@@ -710,6 +837,14 @@ private struct CapturePanelModifier: ViewModifier {
 private extension View {
     func panelStyle() -> some View {
         modifier(CapturePanelModifier())
+    }
+
+    func readinessBadge(foreground: Color, background: Color) -> some View {
+        font(.caption.weight(.semibold))
+            .foregroundStyle(foreground)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(background, in: Capsule())
     }
 }
 

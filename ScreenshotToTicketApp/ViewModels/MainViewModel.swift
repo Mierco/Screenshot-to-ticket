@@ -1,4 +1,6 @@
 import Foundation
+import ImageIO
+import Photos
 import PhotosUI
 import SwiftUI
 import UIKit
@@ -11,6 +13,17 @@ final class MainViewModel: ObservableObject {
         let fileName: String
         let contentType: String
         let aiPreviewJPEG: Data?
+        let metadata: ScreenshotMetadata?
+    }
+
+    struct ScreenshotMetadata {
+        var capturedAt: Date?
+        var device: String?
+        var osVersion: String?
+
+        var hasReadableValues: Bool {
+            capturedAt != nil || device != nil || osVersion != nil
+        }
     }
 
     enum AnnotationColor: String, CaseIterable, Identifiable {
@@ -62,6 +75,7 @@ final class MainViewModel: ObservableObject {
         let fileName: String
         let contentType: String
         let aiPreviewJPEG: Data?
+        let metadata: ScreenshotMetadata?
 
         var isImage: Bool { kind == .image }
     }
@@ -69,15 +83,19 @@ final class MainViewModel: ObservableObject {
     @Published var selectedItems: [PhotosPickerItem] = []
     @Published var mediaItems: [LoadedMedia] = []
     @Published var hintText: String = ""
+    @Published var draftSummary: String = ""
+    @Published var draftDescription: String = ""
     @Published var status: String = ""
     @Published var issueURL: URL?
     @Published var isSubmitting = false
+    @Published private(set) var isPreparingDraft = false
     @Published var isLoadingMedia = false
     @Published var enableMarkup = false
     @Published var isMarkupDrawingMode = false
     @Published var selectedColor: AnnotationColor = .red
     let markupOpacity = 0.75
 
+    @Published private(set) var hasDraft = false
     @Published private(set) var marksByMediaID: [UUID: [AnnotationMark]] = [:]
 
     func refreshSelectedMedia() async {
@@ -132,10 +150,61 @@ final class MainViewModel: ObservableObject {
         marksByMediaID[mediaID] = []
     }
 
+    func discardDraft() {
+        draftSummary = ""
+        draftDescription = ""
+        hasDraft = false
+        issueURL = nil
+        status = ""
+    }
+
+    func prepareDraft(settings: SettingsStore) async {
+        issueURL = nil
+        guard settings.isConfigured else {
+            status = "Complete the Jira profile and OpenAI settings."
+            return
+        }
+
+        isPreparingDraft = true
+        isSubmitting = true
+        defer {
+            isPreparingDraft = false
+            isSubmitting = false
+        }
+
+        do {
+            let attachments = try await preparedAttachments()
+            let aiImages = attachments.compactMap(\.aiPreviewJPEG)
+            let draft = try await draftTicket(
+                images: aiImages,
+                settings: settings
+            )
+            let metadataText = Self.metadataDescription(from: attachments)
+            let notes = hintText.isEmpty ? "" : "\n\nReporter notes:\n\(hintText)"
+            draftSummary = draft.summary
+            draftDescription = draft.description + metadataText + notes
+            hasDraft = true
+            status = "Ticket draft ready for review."
+        } catch {
+            status = "Failed: \(error.localizedDescription)"
+        }
+    }
+
     func submit(settings: SettingsStore) async {
         issueURL = nil
         guard settings.isConfigured else {
-            status = "Fill Jira/OpenAI credentials and select a Jira profile in Settings."
+            status = "Complete the Jira profile and OpenAI settings."
+            return
+        }
+        guard hasDraft else {
+            status = "Review the ticket draft before creating it."
+            return
+        }
+
+        let summary = draftSummary.trimmingCharacters(in: .whitespacesAndNewlines)
+        let description = draftDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !summary.isEmpty, !description.isEmpty else {
+            status = "Ticket summary and description cannot be empty."
             return
         }
 
@@ -143,112 +212,140 @@ final class MainViewModel: ObservableObject {
         defer { isSubmitting = false }
 
         do {
-            guard let jiraProfile = settings.activeJiraProfile else {
-                status = "Select a Jira profile in Settings."
-                return
-            }
-            let defaultFields = try settings.defaultFields(for: jiraProfile)
-
-            status = "Loading media..."
-            if mediaItems.isEmpty, !selectedItems.isEmpty {
-                await refreshSelectedMedia()
-            }
-            let attachments = try loadAttachmentsFromPreparedMedia()
-            let aiImages = attachments.compactMap(\.aiPreviewJPEG)
-            guard !aiImages.isEmpty else {
-                status = "Select at least one image or video."
-                return
-            }
-
-            status = "Drafting ticket text with AI..."
-            let openAI = OpenAIClient(
-                apiKey: settings.openAIKey,
-                model: settings.model,
-                reasoningEffort: settings.reasoningEffort,
-                ticketPrompt: settings.effectiveTicketPrompt
+            let attachments = try await preparedAttachments()
+            try await createTicket(
+                summary: summary,
+                description: description,
+                attachments: attachments,
+                settings: settings
             )
-            let draft = try await openAI.draftTicket(from: aiImages, userHint: hintText)
-
-            let notes = hintText.isEmpty ? "" : "\n\nReporter notes:\n\(hintText)"
-            let descriptionText = draft.description + notes
-
-            let jira = JiraClient(
-                workspaceURL: settings.workspaceURL,
-                email: settings.jiraEmail,
-                apiToken: settings.jiraApiToken,
-                projectKey: jiraProfile.projectKey
-            )
-
-            status = "Resolving fix version..."
-            let fixVersion = try await jira.fetchBiggestUnreleasedVersion()
-            let resolvedDefaultFields = try Self.resolvedDefaultFields(
-                defaultFields,
-                latestUnreleasedVersion: fixVersion
-            )
-
-            status = "Creating Jira issue..."
-            let issue = try await jira.createIssue(
-                summary: draft.summary,
-                description: jira.adfDescription(from: descriptionText),
-                fixVersionId: fixVersion?.id,
-                defaultFields: resolvedDefaultFields
-            )
-
-            status = "Uploading media..."
-            var uploadedAttachments: [JiraAttachmentMetadata] = []
-            for attachment in attachments {
-                let uploaded = try await jira.attachFile(
-                    issueKey: issue.key,
-                    data: attachment.data,
-                    fileName: attachment.fileName,
-                    contentType: attachment.contentType
-                )
-                uploadedAttachments.append(uploaded)
-            }
-
-            status = "Embedding media in description..."
-            do {
-                try await jira.updateIssueDescription(
-                    issueKey: issue.key,
-                    description: jira.adfDescription(from: descriptionText, attachments: uploadedAttachments)
-                )
-            } catch {
-                // Fallback: keep media references in the description as links if rich media ADF is rejected.
-                try await jira.updateIssueDescription(
-                    issueKey: issue.key,
-                    description: jira.adfDescriptionWithAttachmentLinks(from: descriptionText, attachments: uploadedAttachments)
-                )
-            }
-
-            let base = settings.workspaceURL.hasSuffix("/") ? String(settings.workspaceURL.dropLast()) : settings.workspaceURL
-            let issueLink = "\(base)/browse/\(issue.key)"
-            issueURL = URL(string: issueLink)
-            status = "Done: \(issue.key)"
         } catch {
             status = "Failed: \(error.localizedDescription)"
         }
+    }
+
+    private func preparedAttachments() async throws -> [Attachment] {
+        status = "Loading media..."
+        if mediaItems.isEmpty, !selectedItems.isEmpty {
+            await refreshSelectedMedia()
+        }
+        let attachments = try loadAttachmentsFromPreparedMedia()
+        guard attachments.contains(where: { $0.aiPreviewJPEG != nil }) else {
+            throw NSError(
+                domain: "MainViewModel",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "Select at least one image or video."]
+            )
+        }
+        return attachments
+    }
+
+    private func draftTicket(
+        images: [Data],
+        settings: SettingsStore
+    ) async throws -> TicketDraft {
+        status = "OpenAI is drafting ticket text..."
+        return try await OpenAIClient(
+            apiKey: settings.openAIKey,
+            model: settings.model,
+            reasoningEffort: settings.reasoningEffort,
+            ticketPrompt: settings.effectiveTicketPrompt
+        ).draftTicket(from: images, userHint: hintText)
+    }
+
+    private func createTicket(
+        summary: String,
+        description: String,
+        attachments: [Attachment],
+        settings: SettingsStore
+    ) async throws {
+        guard let jiraProfile = settings.activeJiraProfile else {
+            throw NSError(
+                domain: "MainViewModel",
+                code: 2,
+                userInfo: [NSLocalizedDescriptionKey: "Select a Jira profile in Settings."]
+            )
+        }
+        let defaultFields = try settings.defaultFields(for: jiraProfile)
+
+        let jira = try await settings.jiraClient(
+            workspaceURL: jiraProfile.workspaceURL,
+            projectKey: jiraProfile.projectKey
+        )
+
+        status = "Resolving fix version..."
+        let fixVersion = try await jira.fetchBiggestUnreleasedVersion()
+        let resolvedDefaultFields = try Self.resolvedDefaultFields(
+            defaultFields,
+            latestUnreleasedVersion: fixVersion
+        )
+
+        status = "Creating Jira issue..."
+        let issue = try await jira.createIssue(
+            summary: summary,
+            description: jira.adfDescription(from: description),
+            fixVersionId: fixVersion?.id,
+            defaultFields: resolvedDefaultFields
+        )
+
+        status = "Uploading media..."
+        var uploadedAttachments: [JiraAttachmentMetadata] = []
+        for attachment in attachments {
+            let uploaded = try await jira.attachFile(
+                issueKey: issue.key,
+                data: attachment.data,
+                fileName: attachment.fileName,
+                contentType: attachment.contentType
+            )
+            uploadedAttachments.append(uploaded)
+        }
+
+        status = "Embedding media in description..."
+        do {
+            try await jira.updateIssueDescription(
+                issueKey: issue.key,
+                description: jira.adfDescription(from: description, attachments: uploadedAttachments)
+            )
+        } catch {
+            try await jira.updateIssueDescription(
+                issueKey: issue.key,
+                description: jira.adfDescriptionWithAttachmentLinks(from: description, attachments: uploadedAttachments)
+            )
+        }
+
+        let base = jiraProfile.workspaceURL.hasSuffix("/") ? String(jiraProfile.workspaceURL.dropLast()) : jiraProfile.workspaceURL
+        issueURL = URL(string: "\(base)/browse/\(issue.key)")
+        status = "Done: \(issue.key)"
     }
 
     private func loadMedia(from items: [PhotosPickerItem]) async throws -> [LoadedMedia] {
         var result: [LoadedMedia] = []
         for (index, item) in items.enumerated() {
             if let data = try await item.loadTransferable(type: Data.self) {
+                let asset = Self.photoAsset(for: item)
                 let isVideo = item.supportedContentTypes.contains {
                     $0.conforms(to: .movie) || $0.conforms(to: .video) || $0.conforms(to: .audiovisualContent)
                 }
                 if isVideo {
-                    let preview = VideoThumbnail.jpegPreview(from: data).flatMap(UIImage.init(data:)) ?? UIImage()
+                    let previewJPEG = VideoThumbnail.jpegPreview(from: data)
+                    let videoType = Self.preferredContentType(
+                        from: item,
+                        conformingTo: [.movie, .video, .audiovisualContent]
+                    )
+                    let preview = previewJPEG.flatMap(UIImage.init(data:)) ?? UIImage()
                     result.append(
                         LoadedMedia(
                             kind: .video,
                             originalData: data,
                             previewImage: preview,
-                            fileName: "attachment-\(index + 1).mp4",
-                            contentType: "video/mp4",
-                            aiPreviewJPEG: VideoThumbnail.jpegPreview(from: data)
+                            fileName: "attachment-\(index + 1).\(videoType?.preferredFilenameExtension ?? "mp4")",
+                            contentType: videoType?.preferredMIMEType ?? "video/mp4",
+                            aiPreviewJPEG: previewJPEG,
+                            metadata: Self.mediaMetadata(asset: asset)
                         )
                     )
                 } else {
+                    let metadata = Self.mediaMetadata(fromImageData: data, asset: asset)
                     let jpeg = ImageCompression.compressedJPEG(data)
                     guard let image = UIImage(data: jpeg) else { continue }
                     result.append(
@@ -258,7 +355,8 @@ final class MainViewModel: ObservableObject {
                             previewImage: image,
                             fileName: "attachment-\(index + 1).jpg",
                             contentType: "image/jpeg",
-                            aiPreviewJPEG: jpeg
+                            aiPreviewJPEG: jpeg,
+                            metadata: metadata
                         )
                     )
                 }
@@ -279,7 +377,8 @@ final class MainViewModel: ObservableObject {
                             data: annotated,
                             fileName: media.fileName,
                             contentType: media.contentType,
-                            aiPreviewJPEG: annotated
+                            aiPreviewJPEG: annotated,
+                            metadata: media.metadata
                         )
                     )
                 } else {
@@ -288,7 +387,8 @@ final class MainViewModel: ObservableObject {
                             data: media.originalData,
                             fileName: media.fileName,
                             contentType: media.contentType,
-                            aiPreviewJPEG: media.aiPreviewJPEG
+                            aiPreviewJPEG: media.aiPreviewJPEG,
+                            metadata: media.metadata
                         )
                     )
                 }
@@ -298,7 +398,8 @@ final class MainViewModel: ObservableObject {
                         data: media.originalData,
                         fileName: media.fileName,
                         contentType: media.contentType,
-                        aiPreviewJPEG: media.aiPreviewJPEG
+                        aiPreviewJPEG: media.aiPreviewJPEG,
+                        metadata: media.metadata
                     )
                 )
             }
@@ -386,10 +487,187 @@ final class MainViewModel: ObservableObject {
         return value
     }
 
+    private static func photoAsset(for item: PhotosPickerItem) -> PHAsset? {
+        guard let itemIdentifier = item.itemIdentifier else { return nil }
+        return PHAsset.fetchAssets(withLocalIdentifiers: [itemIdentifier], options: nil).firstObject
+    }
+
+    private static func preferredContentType(from item: PhotosPickerItem, conformingTo targetTypes: [UTType]) -> UTType? {
+        item.supportedContentTypes.first { contentType in
+            targetTypes.contains { contentType.conforms(to: $0) }
+        }
+    }
+
+    private static func mediaMetadata(asset: PHAsset?) -> ScreenshotMetadata? {
+        let metadata = ScreenshotMetadata(capturedAt: asset?.creationDate)
+        return metadata.hasReadableValues ? metadata : nil
+    }
+
+    private static func mediaMetadata(fromImageData data: Data, asset: PHAsset?) -> ScreenshotMetadata? {
+        var metadata = mediaMetadata(asset: asset) ?? ScreenshotMetadata()
+        guard let properties = imageProperties(from: data) else {
+            return metadata.hasReadableValues ? metadata : nil
+        }
+
+        metadata.capturedAt = metadata.capturedAt ?? capturedAt(from: properties)
+        metadata.device = deviceName(from: properties)
+        metadata.osVersion = osVersion(from: properties)
+
+        return metadata.hasReadableValues ? metadata : nil
+    }
+
+    private static func imageProperties(from data: Data) -> [String: Any]? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [String: Any] else {
+            return nil
+        }
+        return properties
+    }
+
+    private static func capturedAt(from properties: [String: Any]) -> Date? {
+        let exif = dictionary(properties, for: kCGImagePropertyExifDictionary)
+        let png = dictionary(properties, for: kCGImagePropertyPNGDictionary)
+        let tiff = dictionary(properties, for: kCGImagePropertyTIFFDictionary)
+
+        if let date = dateValue(
+            exif?[kCGImagePropertyExifDateTimeOriginal as String],
+            offset: stringValue(exif?[kCGImagePropertyExifOffsetTimeOriginal as String])
+        ) {
+            return date
+        }
+
+        if let date = dateValue(png?[kCGImagePropertyPNGCreationTime as String], offset: nil) {
+            return date
+        }
+
+        return dateValue(tiff?[kCGImagePropertyTIFFDateTime as String], offset: nil)
+    }
+
+    private static func deviceName(from properties: [String: Any]) -> String? {
+        guard let tiff = dictionary(properties, for: kCGImagePropertyTIFFDictionary) else { return nil }
+        let make = stringValue(tiff[kCGImagePropertyTIFFMake as String])
+        let model = stringValue(tiff[kCGImagePropertyTIFFModel as String])
+
+        switch (make, model) {
+        case let (make?, model?) where model.localizedCaseInsensitiveContains(make):
+            return model
+        case let (make?, model?):
+            return "\(make) \(model)"
+        case let (_, model?):
+            return model
+        default:
+            return nil
+        }
+    }
+
+    private static func osVersion(from properties: [String: Any]) -> String? {
+        let tiff = dictionary(properties, for: kCGImagePropertyTIFFDictionary)
+        let png = dictionary(properties, for: kCGImagePropertyPNGDictionary)
+        let software = [
+            stringValue(tiff?[kCGImagePropertyTIFFSoftware as String]),
+            stringValue(png?[kCGImagePropertyPNGSoftware as String])
+        ]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .first { !$0.isEmpty }
+
+        guard let software else { return nil }
+        let lowercased = software.lowercased()
+        if lowercased.contains("ios") || lowercased.contains("ipados") {
+            return software
+        }
+
+        if deviceName(from: properties) != nil,
+           software.range(of: #"^\d+(\.\d+){1,2}$"#, options: .regularExpression) != nil {
+            return "iOS \(software)"
+        }
+
+        return nil
+    }
+
+    private static func dictionary(_ properties: [String: Any], for key: CFString) -> [String: Any]? {
+        properties[key as String] as? [String: Any]
+    }
+
+    private static func stringValue(_ value: Any?) -> String? {
+        if let value = value as? String {
+            return value.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        }
+        if let value = value as? NSString {
+            return String(value).trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        }
+        if let value = value as? NSNumber {
+            return value.stringValue
+        }
+        return nil
+    }
+
+    private static func dateValue(_ value: Any?, offset: String?) -> Date? {
+        if let value = value as? Date {
+            return value
+        }
+
+        guard let string = stringValue(value) else { return nil }
+        let locale = Locale(identifier: "en_US_POSIX")
+        let candidates: [(String, String)] = [
+            ("yyyy:MM:dd HH:mm:ssXXXXX", offset.map { string + $0 } ?? string),
+            ("yyyy:MM:dd HH:mm:ss", string),
+            ("yyyy-MM-dd'T'HH:mm:ssXXXXX", string),
+            ("yyyy-MM-dd'T'HH:mm:ss.SSSXXXXX", string),
+            ("yyyy-MM-dd HH:mm:ss Z", string)
+        ]
+
+        for (format, candidate) in candidates {
+            let formatter = DateFormatter()
+            formatter.locale = locale
+            formatter.timeZone = TimeZone.current
+            formatter.dateFormat = format
+            if let date = formatter.date(from: candidate) {
+                return date
+            }
+        }
+
+        return ISO8601DateFormatter().date(from: string)
+    }
+
+    private static func metadataDescription(from attachments: [Attachment]) -> String {
+        let entries = attachments.enumerated().compactMap { index, attachment -> String? in
+            guard let metadata = attachment.metadata, metadata.hasReadableValues else { return nil }
+            var lines = ["Attachment \(index + 1) (\(attachment.fileName))"]
+            if let capturedAt = metadata.capturedAt {
+                lines.append("- Date/time: \(displayDateFormatter.string(from: capturedAt))")
+            }
+            if let device = metadata.device {
+                lines.append("- Device: \(device)")
+            }
+            if let osVersion = metadata.osVersion {
+                lines.append("- OS version: \(osVersion)")
+            }
+            return lines.joined(separator: "\n")
+        }
+
+        guard !entries.isEmpty else { return "" }
+        return "\n\nScreenshot metadata:\n" + entries.joined(separator: "\n\n")
+    }
+
+    private static var displayDateFormatter: DateFormatter {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .medium
+        formatter.locale = .current
+        formatter.timeZone = .current
+        return formatter
+    }
+
     private func clampedPoint(_ point: CGPoint) -> CGPoint {
         CGPoint(
             x: min(max(point.x, 0), 1),
             y: min(max(point.y, 0), 1)
         )
+    }
+}
+
+private extension String {
+    var nilIfEmpty: String? {
+        isEmpty ? nil : self
     }
 }

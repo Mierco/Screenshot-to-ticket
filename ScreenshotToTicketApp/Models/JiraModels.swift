@@ -20,19 +20,39 @@ struct JiraProjectSearchResponse: Decodable {
 struct JiraProfile: Codable, Identifiable, Equatable {
     var id: String
     var name: String
+    var workspaceURL: String
     var projectKey: String
     var defaultFieldsJSON: String
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case workspaceURL
+        case projectKey
+        case defaultFieldsJSON
+    }
 
     init(
         id: String = UUID().uuidString,
         name: String,
+        workspaceURL: String = "",
         projectKey: String,
         defaultFieldsJSON: String = "{}"
     ) {
         self.id = id
         self.name = name
+        self.workspaceURL = workspaceURL
         self.projectKey = projectKey
         self.defaultFieldsJSON = defaultFieldsJSON
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(String.self, forKey: .id) ?? UUID().uuidString
+        name = try container.decodeIfPresent(String.self, forKey: .name) ?? ""
+        workspaceURL = try container.decodeIfPresent(String.self, forKey: .workspaceURL) ?? ""
+        projectKey = try container.decodeIfPresent(String.self, forKey: .projectKey) ?? ""
+        defaultFieldsJSON = try container.decodeIfPresent(String.self, forKey: .defaultFieldsJSON) ?? "{}"
     }
 }
 

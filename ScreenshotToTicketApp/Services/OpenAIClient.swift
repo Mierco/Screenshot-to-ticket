@@ -35,7 +35,7 @@ Rules:
     func draftTicket(from images: [Data], userHint: String) async throws -> TicketDraft {
         var content: [[String: Any]] = [[
             "type": "input_text",
-            "text": prompt(userHint: userHint)
+            "text": Self.prompt(ticketPrompt: ticketPrompt, userHint: userHint)
         ]]
 
         for image in images {
@@ -77,10 +77,10 @@ Rules:
             .first(where: { $0.type == "output_text" })?
             .text ?? ""
 
-        return parseDraft(text)
+        return Self.parseDraft(text)
     }
 
-    private func prompt(userHint: String) -> String {
+    static func prompt(ticketPrompt: String, userHint: String) -> String {
         let basePrompt = ticketPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             ? Self.defaultTicketPrompt
             : ticketPrompt
@@ -92,13 +92,22 @@ Rules:
         return "\(basePrompt.trimmingCharacters(in: .whitespacesAndNewlines))\n\n\(hintSection)"
     }
 
-    private func parseDraft(_ text: String) -> TicketDraft {
+    static func parseDraft(_ text: String) -> TicketDraft {
         let cleaned = text
             .replacingOccurrences(of: "```json", with: "")
             .replacingOccurrences(of: "```", with: "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
-        guard let data = cleaned.data(using: .utf8),
+        let jsonText: String
+        if let start = cleaned.firstIndex(of: "{"),
+           let end = cleaned.lastIndex(of: "}"),
+           start <= end {
+            jsonText = String(cleaned[start...end])
+        } else {
+            jsonText = cleaned
+        }
+
+        guard let data = jsonText.data(using: .utf8),
               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: String],
               let summary = obj["summary"],
               let description = obj["description"] else {

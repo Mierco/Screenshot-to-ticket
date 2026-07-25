@@ -1,10 +1,28 @@
+import AuthenticationServices
 import Foundation
+import UIKit
 
 struct JiraClient {
+    enum Auth {
+        case basic(email: String, apiToken: String)
+        case bearer(accessToken: String, cloudID: String)
+    }
+
     let workspaceURL: String
-    let email: String
-    let apiToken: String
+    let auth: Auth
     let projectKey: String
+
+    init(workspaceURL: String, email: String, apiToken: String, projectKey: String) {
+        self.workspaceURL = workspaceURL
+        self.auth = .basic(email: email, apiToken: apiToken)
+        self.projectKey = projectKey
+    }
+
+    init(workspaceURL: String, auth: Auth, projectKey: String) {
+        self.workspaceURL = workspaceURL
+        self.auth = auth
+        self.projectKey = projectKey
+    }
 
     func fetchCurrentUser() async throws -> JiraMyself {
         let endpoint = apiURL("/rest/api/3/myself")
@@ -192,14 +210,23 @@ struct JiraClient {
         var request = URLRequest(url: url)
         request.httpMethod = method
 
-        let credentials = "\(email):\(apiToken)"
-        let auth = Data(credentials.utf8).base64EncodedString()
-        request.setValue("Basic \(auth)", forHTTPHeaderField: "Authorization")
+        switch auth {
+        case let .basic(email, apiToken):
+            let credentials = "\(email):\(apiToken)"
+            let encoded = Data(credentials.utf8).base64EncodedString()
+            request.setValue("Basic \(encoded)", forHTTPHeaderField: "Authorization")
+        case let .bearer(accessToken, _):
+            request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        }
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         return request
     }
 
     private func apiURL(_ path: String) -> String {
+        if case let .bearer(_, cloudID) = auth {
+            return "https://api.atlassian.com/ex/jira/\(pathComponent(cloudID))\(path)"
+        }
+
         let base = workspaceURL.hasSuffix("/") ? String(workspaceURL.dropLast()) : workspaceURL
         return "\(base)\(path)"
     }
@@ -337,4 +364,258 @@ struct JiraClient {
             ]]
         ]
     }
+}
+
+struct AtlassianOAuthConfiguration {
+    let clientID: String
+    let redirectURL: URL?
+    let tokenBrokerURL: URL?
+
+    static var current: AtlassianOAuthConfiguration {
+        let bundle = Bundle.main
+        return AtlassianOAuthConfiguration(
+            clientID: bundle.object(forInfoDictionaryKey: "AtlassianOAuthClientID") as? String ?? "",
+            redirectURL: (bundle.object(forInfoDictionaryKey: "AtlassianOAuthRedirectURL") as? String).flatMap(URL.init(string:)),
+            tokenBrokerURL: (bundle.object(forInfoDictionaryKey: "AtlassianOAuthTokenBrokerURL") as? String).flatMap(URL.init(string:))
+        )
+    }
+
+    var isConfigured: Bool {
+        !clientID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && redirectURL != nil
+            && tokenBrokerURL != nil
+    }
+}
+
+struct AtlassianOAuthTokens {
+    let accessToken: String
+    let refreshToken: String
+    let expiresAt: Date
+}
+
+struct AtlassianOAuthConnection {
+    let tokens: AtlassianOAuthTokens
+    let cloudID: String
+    let workspaceURL: String
+    let siteName: String
+}
+
+final class AtlassianOAuthService: NSObject, ASWebAuthenticationPresentationContextProviding {
+    private let configuration: AtlassianOAuthConfiguration
+    private var currentSession: ASWebAuthenticationSession?
+    private let scopes = [
+        "read:jira-user",
+        "read:jira-work",
+        "write:jira-work",
+        "offline_access"
+    ]
+
+    init(configuration: AtlassianOAuthConfiguration = .current) {
+        self.configuration = configuration
+    }
+
+    func authorize(preferredWorkspaceURL: String) async throws -> AtlassianOAuthConnection {
+        guard configuration.isConfigured,
+              let redirectURL = configuration.redirectURL else {
+            throw NSError(
+                domain: "AtlassianOAuth",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "Atlassian OAuth is not configured for this build."]
+            )
+        }
+
+        let state = UUID().uuidString
+        let code = try await requestAuthorizationCode(state: state, redirectURL: redirectURL)
+        let tokens = try await exchangeAuthorizationCode(code, redirectURL: redirectURL)
+        let resources = try await fetchAccessibleResources(accessToken: tokens.accessToken)
+
+        guard let resource = preferredResource(from: resources, preferredWorkspaceURL: preferredWorkspaceURL) else {
+            throw NSError(
+                domain: "AtlassianOAuth",
+                code: 2,
+                userInfo: [NSLocalizedDescriptionKey: "No accessible Jira Cloud site was returned for this account."]
+            )
+        }
+
+        return AtlassianOAuthConnection(
+            tokens: tokens,
+            cloudID: resource.id,
+            workspaceURL: resource.url,
+            siteName: resource.name
+        )
+    }
+
+    func refresh(refreshToken: String) async throws -> AtlassianOAuthTokens {
+        try await requestTokens(payload: [
+            "grant_type": "refresh_token",
+            "client_id": configuration.clientID,
+            "refresh_token": refreshToken
+        ])
+    }
+
+    func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
+        UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+            .first { $0.isKeyWindow } ?? ASPresentationAnchor()
+    }
+
+    private func requestAuthorizationCode(state: String, redirectURL: URL) async throws -> String {
+        guard var components = URLComponents(string: "https://auth.atlassian.com/authorize") else {
+            throw NSError(domain: "AtlassianOAuth", code: 3, userInfo: [NSLocalizedDescriptionKey: "Invalid Atlassian authorization URL."])
+        }
+
+        components.queryItems = [
+            URLQueryItem(name: "audience", value: "api.atlassian.com"),
+            URLQueryItem(name: "client_id", value: configuration.clientID),
+            URLQueryItem(name: "scope", value: scopes.joined(separator: " ")),
+            URLQueryItem(name: "redirect_uri", value: redirectURL.absoluteString),
+            URLQueryItem(name: "state", value: state),
+            URLQueryItem(name: "response_type", value: "code"),
+            URLQueryItem(name: "prompt", value: "consent")
+        ]
+
+        guard let authorizationURL = components.url else {
+            throw NSError(domain: "AtlassianOAuth", code: 4, userInfo: [NSLocalizedDescriptionKey: "Could not build Atlassian authorization URL."])
+        }
+
+        return try await withCheckedThrowingContinuation { continuation in
+            let session = ASWebAuthenticationSession(
+                url: authorizationURL,
+                callbackURLScheme: redirectURL.scheme
+            ) { callbackURL, error in
+                self.currentSession = nil
+                if let error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+
+                guard let callbackURL,
+                      let components = URLComponents(url: callbackURL, resolvingAgainstBaseURL: false) else {
+                    continuation.resume(throwing: NSError(domain: "AtlassianOAuth", code: 5, userInfo: [NSLocalizedDescriptionKey: "Missing Atlassian callback URL."]))
+                    return
+                }
+
+                let returnedState = components.queryItems?.first { $0.name == "state" }?.value
+                guard returnedState == state else {
+                    continuation.resume(throwing: NSError(domain: "AtlassianOAuth", code: 6, userInfo: [NSLocalizedDescriptionKey: "Atlassian OAuth state did not match."]))
+                    return
+                }
+
+                if let message = components.queryItems?.first(where: { $0.name == "error_description" })?.value
+                    ?? components.queryItems?.first(where: { $0.name == "error" })?.value {
+                    continuation.resume(throwing: NSError(domain: "AtlassianOAuth", code: 7, userInfo: [NSLocalizedDescriptionKey: message]))
+                    return
+                }
+
+                guard let code = components.queryItems?.first(where: { $0.name == "code" })?.value,
+                      !code.isEmpty else {
+                    continuation.resume(throwing: NSError(domain: "AtlassianOAuth", code: 8, userInfo: [NSLocalizedDescriptionKey: "Atlassian callback did not include an authorization code."]))
+                    return
+                }
+
+                continuation.resume(returning: code)
+            }
+            session.presentationContextProvider = self
+            session.prefersEphemeralWebBrowserSession = false
+            self.currentSession = session
+            session.start()
+        }
+    }
+
+    private func exchangeAuthorizationCode(_ code: String, redirectURL: URL) async throws -> AtlassianOAuthTokens {
+        try await requestTokens(payload: [
+            "grant_type": "authorization_code",
+            "client_id": configuration.clientID,
+            "code": code,
+            "redirect_uri": redirectURL.absoluteString
+        ])
+    }
+
+    private func requestTokens(payload: [String: String]) async throws -> AtlassianOAuthTokens {
+        guard let tokenBrokerURL = configuration.tokenBrokerURL else {
+            throw NSError(domain: "AtlassianOAuth", code: 9, userInfo: [NSLocalizedDescriptionKey: "Atlassian OAuth token broker URL is missing."])
+        }
+
+        var request = URLRequest(url: tokenBrokerURL)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.httpBody = try JSONEncoder().encode(payload)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            let text = String(data: data, encoding: .utf8) ?? "Unknown OAuth token broker error"
+            throw NSError(domain: "AtlassianOAuth", code: 10, userInfo: [NSLocalizedDescriptionKey: text])
+        }
+
+        let decoded = try JSONDecoder().decode(TokenBrokerResponse.self, from: data)
+        guard !decoded.accessToken.isEmpty else {
+            throw NSError(domain: "AtlassianOAuth", code: 11, userInfo: [NSLocalizedDescriptionKey: "Token broker returned no access token."])
+        }
+
+        return AtlassianOAuthTokens(
+            accessToken: decoded.accessToken,
+            refreshToken: decoded.refreshToken ?? "",
+            expiresAt: Date().addingTimeInterval(TimeInterval(decoded.expiresIn ?? 3600))
+        )
+    }
+
+    private func fetchAccessibleResources(accessToken: String) async throws -> [AccessibleResource] {
+        guard let url = URL(string: "https://api.atlassian.com/oauth/token/accessible-resources") else {
+            return []
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            let text = String(data: data, encoding: .utf8) ?? "Unknown Atlassian resource error"
+            throw NSError(domain: "AtlassianOAuth", code: 12, userInfo: [NSLocalizedDescriptionKey: text])
+        }
+
+        return try JSONDecoder().decode([AccessibleResource].self, from: data)
+    }
+
+    private func preferredResource(from resources: [AccessibleResource], preferredWorkspaceURL: String) -> AccessibleResource? {
+        let jiraResources = resources.filter { resource in
+            resource.scopes.contains { $0.contains("jira") }
+        }
+
+        let normalizedPreferredURL = normalizedURL(preferredWorkspaceURL)
+        if !normalizedPreferredURL.isEmpty,
+           let matchingResource = jiraResources.first(where: { normalizedURL($0.url) == normalizedPreferredURL }) {
+            return matchingResource
+        }
+
+        return jiraResources.first ?? resources.first
+    }
+
+    private func normalizedURL(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            .lowercased()
+    }
+}
+
+private struct TokenBrokerResponse: Decodable {
+    let accessToken: String
+    let refreshToken: String?
+    let expiresIn: Int?
+
+    private enum CodingKeys: String, CodingKey {
+        case accessToken = "access_token"
+        case refreshToken = "refresh_token"
+        case expiresIn = "expires_in"
+    }
+}
+
+private struct AccessibleResource: Decodable {
+    let id: String
+    let url: String
+    let name: String
+    let scopes: [String]
 }
